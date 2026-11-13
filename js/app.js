@@ -782,7 +782,7 @@
       dice3d.loading = (async () => {
         const el = document.createElement('div');
         el.className = 'dice3d';
-        el.innerHTML = '<div class="dice3d-stage" id="dice3d-stage"></div><div class="dice3d-hint">toque para pular</div>';
+        el.innerHTML = '<div class="dice3d-stage" id="dice3d-stage"></div>';
         document.body.appendChild(el);
         dice3d.el = el;
         await loadScript('vendor/dice-box-threejs.umd.js');
@@ -826,16 +826,14 @@
     if (d10.length) parts.push(`${d10.length}d10`);
     const notation = `${parts.join('+')}@${[...d6, ...d10].join(',')}`;
     const el = dice3d.el;
-    let skip;
-    const skipped = new Promise((r) => { skip = r; });
-    el.onclick = () => skip();
     el.classList.add('show');
     try {
-      await Promise.race([box.roll(notation), skipped, wait(7000)]);
-      await Promise.race([wait(900), skipped]);
+      // box.roll só resolve quando todos os dados param (corpos "dormindo" na física).
+      // O tempo limite é só uma trava de segurança caso algo trave.
+      await Promise.race([box.roll(notation), wait(25000)]);
+      await wait(700); // deixa os dados parados à vista antes de mostrar o total
     } finally {
       el.classList.remove('show');
-      el.onclick = null;
       setTimeout(() => { try { box.clearDice(); } catch (e) { /* ok */ } }, 250);
     }
   }

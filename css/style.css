@@ -430,10 +430,9 @@ body.mode-edit .play-only { display: none !important; }
 #modal-root.static .overlay, #modal-root.static .sheet-modal, #modal-root.static .drawer { animation: none; }
 
 /* Dados 3D */
-.dice3d { position: fixed; inset: 0; z-index: 70; background: rgba(18,18,18,.6); opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s; cursor: pointer; }
+.dice3d { position: fixed; inset: 0; z-index: 70; background: rgba(18,18,18,.6); opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s; }
 .dice3d.show { opacity: 1; visibility: visible; }
 .dice3d-stage { position: absolute; inset: 0; }
-.dice3d-hint { position: absolute; left: 0; right: 0; bottom: calc(24px + env(safe-area-inset-bottom)); text-align: center; color: var(--steel-0); font-size: 13px; opacity: .75; pointer-events: none; }
 
 .skin-chip { gap: 4px; }
 .skin-chip i { width: 14px; height: 14px; border: 2px solid; border-radius: 2px; display: inline-block; }
