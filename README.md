@@ -22,6 +22,7 @@ Construtor de fichas de **A Lenda do Dragão de Fogo: Karyu Densetsu** para mont
 - **Dados 3D:** animação com física e 3 skins nas cores do style guide (Karyu, Aço, Brasa). Pode ser desligada.
 - **Mesa:** nova rodada, nova cena, fim de sessão (cálculo de karma), Tensão, Karma e poder das emoções (Esperança, Confiança…).
 - **Várias fichas** no mesmo aparelho, com exportar/importar `.json`.
+- **Som dos dados** (mesa de madeira), com opção de desligar.
 - **PWA:** dá para instalar na tela inicial, funciona offline e pode manter a tela ligada durante o jogo.
 
 ## Sorte justa
@@ -60,5 +61,7 @@ sw.js, manifest.webmanifest, icons/   PWA
 Ao alterar arquivos, aumente a versão de `CACHE` em `sw.js` para os celulares receberem a atualização.
 
 ## Créditos
+
+Agradecimento especial a **Akira Yamamoto** pelo UI/UX e style guide da ficha.
 
 App de fã, não oficial. *A Lenda do Dragão de Fogo: Karyu Densetsu* © Nina Bichara, Thiago Rosa e Jambô Editora. Os textos de referência são resumos; consulte o livro para as regras completas.

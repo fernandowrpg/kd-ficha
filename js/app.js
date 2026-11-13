@@ -42,6 +42,7 @@
     info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'),
     arrowUp: svg('<path d="M12 19V5M6 11l6-6 6 6"/>'),
     arrowDown: svg('<path d="M12 5v14M6 13l6 6 6-6"/>'),
+    star: svg('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>'),
     table: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   };
 
@@ -140,13 +141,13 @@
           Object.keys(s.chars).forEach((k) => { s.chars[k] = normalize(s.chars[k]); });
           if (!s.chars[s.current]) s.current = s.order[0];
           s.mode = s.mode === 'edit' ? 'edit' : 'play';
-          s.settings = { dice3d: true, diceSkin: 'karyu', ...(s.settings || {}) };
+          s.settings = { dice3d: true, diceSkin: 'karyu', sound: true, ...(s.settings || {}) };
           return s;
         }
       }
     } catch (e) { /* armazenamento indisponível */ }
     const c = sampleChar();
-    return { chars: { [c.id]: c }, order: [c.id], current: c.id, mode: 'play', settings: { dice3d: true, diceSkin: 'karyu' } };
+    return { chars: { [c.id]: c }, order: [c.id], current: c.id, mode: 'play', settings: { dice3d: true, diceSkin: 'karyu', sound: true } };
   }
   let saveTimer = null;
   function save(now) {
@@ -589,6 +590,7 @@
     else if (m.type === 'cat-trunfo') html = catTrunfoModal(c);
     else if (m.type === 'confirm') html = confirmModal(m);
     else if (m.type === 'about') html = aboutModal();
+    else if (m.type === 'credits') html = creditsModal();
     modalRoot.innerHTML = html;
     const box = modalRoot.querySelector('.sheet-modal, .drawer');
     if (box && m.keepScroll) box.scrollTop = prevScroll;
@@ -615,7 +617,8 @@
         <button class="menu-item" data-act="del-char">${I.trash} Excluir esta ficha</button>
         <div class="menu-sep"></div>
         ${wakeOk ? `<button class="menu-item" data-act="wake">${I.sun} ${ui.wake ? 'Tela sempre ligada: ativado' : 'Manter a tela ligada'}</button>` : ''}
-        <button class="menu-item" data-act="about">${I.info} Sobre e como usar</button>
+        <button class="menu-item" data-act="about">${I.info} Como usar</button>
+        <button class="menu-item" data-act="credits">${I.star} Créditos</button>
       </div>
       <input type="file" id="import-file" accept="application/json,.json" hidden>
     </aside></div>`;
@@ -629,7 +632,30 @@
         <p style="margin:0"><b>Jogar</b>: toque em um atributo, estilo ou ocupação para rolar. Toque na técnica para ver detalhes e em “Usar técnica” para gastar nagen e sincronização. A barra inferior mostra Sincronização, Nagen da rodada e Ações extras — toque nela para abrir a Mesa (nova rodada, nova cena, fim de sessão, poder das emoções).</p>
         <p style="margin:0"><b>Dados</b>: o app separa os dois maiores; toque em um dado para trocar a seleção. 6+ fora do total vira Sincronização, 1 fora do total vira Tensão. Nada muda na ficha até você tocar em “Aplicar”.</p>
         <p style="margin:0">Tudo fica salvo neste aparelho. Use “Exportar” para guardar um backup ou passar a ficha para outro celular. Funciona offline depois do primeiro acesso.</p>
-        <p class="caption" style="margin:0">App de fã, não oficial. A Lenda do Dragão de Fogo: Karyu Densetsu © Nina Bichara, Thiago Rosa e Jambô Editora. Consulte o livro para as regras completas.</p>
+        <button class="btn light" data-act="credits">${I.star} Ver créditos</button>
+      </div></div></div>`;
+  }
+
+  function creditsModal() {
+    return `<div class="overlay" data-act="overlay"><div class="sheet-modal" role="dialog" aria-label="Créditos">
+      ${modalHead('Créditos')}
+      <div class="modal-body credits">
+        <div class="thanks">
+          <div class="h-section red">Agradecimento especial</div>
+          <p><b>Akira Yamamoto</b>, pelo UI/UX e style guide da ficha — cores, tipografia e componentes que dão a cara deste app.</p>
+        </div>
+        <div>
+          <div class="group-label">O jogo</div>
+          <p><i>A Lenda do Dragão de Fogo: Karyu Densetsu</i> — criado por <b>Nina Bichara</b> e <b>Thiago Rosa</b>, publicado pela <b>Jambô Editora</b>. Este é um app de fã, não oficial; os textos de referência são resumos. Consulte o livro para as regras completas.</p>
+        </div>
+        <div>
+          <div class="group-label">Tecnologia</div>
+          <ul>
+            <li><b>dice-box-threejs</b> (3d-dice / Frank Ali) — dados 3D, licença MIT, com <b>three.js</b> e <b>cannon-es</b> (MIT).</li>
+            <li>Sons dos dados — acompanham o dice-box-threejs.</li>
+            <li>Fontes <b>Permanent Marker</b> (Font Diner, Apache 2.0) e <b>Chakra Petch</b> (Cadson Demak, OFL 1.1).</li>
+          </ul>
+        </div>
       </div></div></div>`;
   }
 
@@ -721,7 +747,8 @@
   // ----- dados 3D (dice-box-threejs) -----
   // O resultado é sempre sorteado pelo gerador criptográfico acima; a biblioteca 3D só
   // anima os dados caindo exatamente nesses valores (notação "@" de resultado forçado).
-  const dice3d = { box: null, loading: null, el: null, failed: false, sets: {} };
+  const dice3d = { box: null, loading: null, el: null, failed: false, sets: {}, soundsLoaded: false };
+  const soundOn = () => store.settings.sound !== false;
   // Skins no estilo do style guide: d6 = dados de atributo, d10 = sincronização.
   const SKINS = {
     karyu: { nome: 'Karyu', d6: { foreground: '#121212', background: '#FFFFFF', edge: '#121212' }, d10: { foreground: '#FFFFFF', background: '#A03422', edge: '#6E2920' } },
@@ -760,9 +787,11 @@
         const DiceBox = window['dice-box-threejs'];
         const box = new DiceBox('#dice3d-stage', {
           theme_customColorset: { name: 'kd-init', foreground: '#121212', background: '#FFFFFF', outline: 'none', texture: 'none', material: 'plastic' },
-          color_spotlight: 0xffffff, sounds: false, shadows: true, light_intensity: 0.85, gravity_multiplier: 400, baseScale: 100, strength: 1.4,
+          assetPath: 'vendor/dice/', theme_surface: 'taverntable', volume: 100,
+          color_spotlight: 0xffffff, sounds: soundOn(), shadows: true, light_intensity: 0.85, gravity_multiplier: 400, baseScale: 100, strength: 1.4,
         });
         await box.initialize();
+        dice3d.soundsLoaded = soundOn();
         // Cada dado recebe as cores do seu tipo e os números na fonte do jogo.
         const F = box.DiceFactory;
         const create = F.create.bind(F);
@@ -783,6 +812,10 @@
     const box = await getDiceBox();
     await colorSet(box, skinId(), 'd6');
     await colorSet(box, skinId(), 'd10');
+    box.sounds = soundOn();
+    if (box.sounds && !dice3d.soundsLoaded) {
+      try { await box.loadSounds(); dice3d.soundsLoaded = true; } catch (e) { box.sounds = false; }
+    }
     const d6 = dice.filter((x) => x.t === 6).map((x) => x.v);
     const d10 = dice.filter((x) => x.t === 10).map((x) => x.v);
     const parts = [];
@@ -804,6 +837,21 @@
     }
   }
 
+  // Som para os dados 2D (mesmos arquivos da mesa de madeira).
+  const sfx = { cache: {} };
+  function playSfx(file, vol) {
+    try {
+      const a = (sfx.cache[file] = sfx.cache[file] || new Audio(`vendor/dice/sounds/${file}`)).cloneNode();
+      a.volume = vol;
+      a.play().catch(() => {});
+    } catch (e) { /* sem áudio */ }
+  }
+  function sound2d(n) {
+    const pick = (k) => 1 + Math.floor(Math.random() * k);
+    playSfx(`surfaces/surface_wood_table${pick(7)}.mp3`, 0.8);
+    for (let i = 0; i < Math.min(n, 4); i++) setTimeout(() => playSfx(`dicehit/dicehit_plastic${pick(15)}.mp3`, 0.5), 60 + i * 70 + Math.random() * 60);
+  }
+
   function doRoll() {
     const c = ch(), r = ui.roll;
     const p = rollPlan(c, r);
@@ -819,7 +867,10 @@
     const done = () => { result.rolling = false; if (ui.roll && ui.roll.result === result) renderModal(); };
     if (want3d()) {
       show3d(dice).catch(() => toast('Dados 3D indisponíveis neste aparelho — usando dados 2D.')).finally(done);
-    } else setTimeout(done, 450);
+    } else {
+      if (soundOn()) sound2d(dice.length);
+      setTimeout(done, 450);
+    }
   }
 
   function rollOutcome(c, r) {
@@ -881,6 +932,7 @@
         <label class="ctl"><span>Limiar do alvo<small>opcional</small></span><input class="input" style="width:72px;text-align:center;padding:4px" inputmode="numeric" data-act-input="r-alvo" value="${esc(r.alvo)}" placeholder="—"></label>` : ''}
       </div>
       ${r.rolar ? `<div class="ctl" style="flex-wrap:wrap"><label class="toggle">${chk(store.settings.dice3d !== false && !dice3d.failed, 'dice3d', '', 'Dados 3D')} Dados 3D${dice3d.failed ? ' (indisponível)' : ''}</label>
+        <label class="toggle">${chk(soundOn(), 'dice-sound', '', 'Som dos dados')} Som</label>
         ${want3d() ? `<span class="chips">${Object.entries(SKINS).map(([k, v]) => `<button class="chip skin-chip" data-act="dice-skin" data-v="${k}" aria-pressed="${skinId() === k}" title="Skin ${v.nome}"><i style="background:${v.d6.background};border-color:${v.d6.edge}"></i><i style="background:${v.d10.background};border-color:${v.d10.edge};border-radius:50%"></i>${v.nome}</button>`).join('')}</span>` : ''}</div>` : ''}
       ${r.free ? `<div class="note good">Confiança: +${r.free} d10 grátis nesta jogada.</div>` : ''}
       ${r.rolar ? `<p class="caption" style="margin:0;text-align:center">Rola <b>${p.n6}d6</b>${p.n10 ? ` + <b>${p.n10}d10</b>` : ''}${o.bonus ? ` e soma <b>${o.bonus >= 0 ? '+' : ''}${o.bonus}</b>` : ''}${p.extreme ? ' · desvantagem extrema: rola 2 e a Tensão sobe 1' : ''}</p>` : ''}`;
@@ -1049,6 +1101,7 @@
       case 'open-menu': openModal({ type: 'menu' }); break;
       case 'open-mesa': openModal({ type: 'mesa' }); break;
       case 'about': openModal({ type: 'about' }); break;
+      case 'credits': openModal({ type: 'credits' }); break;
 
       case 'step': {
         const path = el.dataset.path;
@@ -1235,6 +1288,7 @@
       case 'r-kiai': ui.roll.kiai = !ui.roll.kiai; renderModal(); break;
       case 'r-rolar': ui.roll.rolar = !ui.roll.rolar; ui.roll.result = null; renderModal(); break;
       case 'r-roll': if (!(ui.roll.result && ui.roll.result.rolling)) doRoll(); break;
+      case 'dice-sound': store.settings.sound = !soundOn(); save(); renderModal(); break;
       case 'dice-skin': store.settings.diceSkin = el.dataset.v; save(); renderModal(); break;
       case 'dice3d': store.settings.dice3d = store.settings.dice3d === false; save(); renderModal(); if (want3d()) getDiceBox().catch(() => {}); break;
       case 'r-die': {
