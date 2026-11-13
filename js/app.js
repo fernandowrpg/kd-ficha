@@ -591,6 +591,9 @@
     else if (m.type === 'confirm') html = confirmModal(m);
     else if (m.type === 'about') html = aboutModal();
     else if (m.type === 'credits') html = creditsModal();
+    // A animação de entrada só roda quando o modal abre; nas atualizações seguintes
+    // o conteúdo é trocado sem animar (evita a tela piscando).
+    modalRoot.classList.toggle('static', !!m.keepScroll);
     modalRoot.innerHTML = html;
     const box = modalRoot.querySelector('.sheet-modal, .drawer');
     if (box && m.keepScroll) box.scrollTop = prevScroll;
@@ -966,7 +969,7 @@
     const canApply = !r.rolar || (res && !res.rolling && o.sel.length === 2);
     return `<div class="overlay" data-act="overlay"><div class="sheet-modal" role="dialog" aria-label="Rolar dados">
       ${modalHead(t ? 'Usar técnica' : 'Rolar dados')}
-      <div class="modal-body">${res && res.rolling ? result : res ? result + tecNotes + `<details><summary class="hint" style="cursor:pointer">Ajustar jogada</summary><div class="stack" style="margin-top:10px">${setup}</div></details>` : setup + tecNotes}</div>
+      <div class="modal-body">${res && res.rolling ? result : res ? result + tecNotes + `<details data-adj ${r.adj ? 'open' : ''}><summary class="hint" style="cursor:pointer">Ajustar jogada</summary><div class="stack" style="margin-top:10px">${setup}</div></details>` : setup + tecNotes}</div>
       <div class="modal-foot">
         ${r.rolar ? `<button class="btn ${res ? 'light' : 'primary'}" data-act="r-roll">${I.dice} ${res ? 'Rolar de novo' : 'Rolar'}</button>` : ''}
         ${res || !r.rolar ? `<button class="btn primary" data-act="r-apply" ${canApply ? '' : 'disabled'}>Aplicar</button>` : ''}
@@ -1377,6 +1380,10 @@
     }
     if (el.id === 'import-file' && el.files && el.files[0]) importChar(el.files[0]);
   });
+  // <details> não propaga "toggle": escuta na fase de captura.
+  document.addEventListener('toggle', (ev) => {
+    if (ev.target.matches && ev.target.matches('details[data-adj]') && ui.roll) ui.roll.adj = ev.target.open;
+  }, true);
   document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape' && ui.modal) closeModal();
   });

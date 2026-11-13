@@ -427,6 +427,8 @@ body.mode-edit .play-only { display: none !important; }
 .note.good { border-left-color: var(--fiery-500); background: var(--fiery-50); }
 .note.bad { border-left-color: var(--steel-950); }
 
+#modal-root.static .overlay, #modal-root.static .sheet-modal, #modal-root.static .drawer { animation: none; }
+
 /* Dados 3D */
 .dice3d { position: fixed; inset: 0; z-index: 70; background: rgba(18,18,18,.6); opacity: 0; visibility: hidden; transition: opacity .2s ease, visibility .2s; cursor: pointer; }
 .dice3d.show { opacity: 1; visibility: visible; }
