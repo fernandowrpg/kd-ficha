@@ -1,5 +1,5 @@
 // Service worker: deixa o app funcionando offline na mesa de jogo.
-const CACHE = 'kd-ficha-v6';
+const CACHE = 'kd-ficha-v7';
 const ASSETS = [
   './', 'index.html', 'css/style.css', 'js/data.js', 'js/tecnicas.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
@@ -50,9 +50,13 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   // Arquivos do app: rede primeiro (pega atualizações), cache se offline.
   if (url.origin === location.origin) {
-    e.respondWith(fetch(req).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(req, copy));
+    // cache: 'no-cache' revalida com o servidor (o GitHub Pages pede 10 min de cache HTTP),
+    // assim as atualizações chegam na hora.
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then((res) => {
+      if (res.ok && res.status === 200) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy));
+      }
       return res;
     }).catch(() => caches.match(req).then((r) => r || caches.match('index.html'))));
     return;

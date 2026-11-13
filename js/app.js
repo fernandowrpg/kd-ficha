@@ -776,25 +776,34 @@
       document.head.appendChild(sc);
     });
   }
+  // Camada escura onde os dados 3D rolam. Criada na hora, independente da biblioteca.
+  function overlay3d() {
+    if (!dice3d.el) {
+      const el = document.createElement('div');
+      el.className = 'dice3d';
+      el.innerHTML = '<div class="dice3d-stage" id="dice3d-stage"></div><div class="dice3d-wait">Preparando os dados...</div>';
+      document.body.appendChild(el);
+      dice3d.el = el;
+    }
+    return dice3d.el;
+  }
   function getDiceBox() {
     if (dice3d.box) return Promise.resolve(dice3d.box);
     if (!dice3d.loading) {
       dice3d.loading = (async () => {
-        const el = document.createElement('div');
-        el.className = 'dice3d';
-        el.innerHTML = '<div class="dice3d-stage" id="dice3d-stage"></div>';
-        document.body.appendChild(el);
-        dice3d.el = el;
+        overlay3d();
         await loadScript('vendor/dice-box-threejs.umd.js');
         try { await document.fonts.load('40px "KD Dice"'); } catch (e) { /* usa a fonte padrão */ }
         const DiceBox = window['dice-box-threejs'];
+        // Sons desligados na inicialização: a biblioteca carregaria os 28 arquivos um a um
+        // antes de liberar os dados. Os sons são ligados depois por attachSounds().
         const box = new DiceBox('#dice3d-stage', {
           theme_customColorset: { name: 'kd-init', foreground: '#121212', background: '#FFFFFF', outline: 'none', texture: 'none', material: 'plastic' },
           assetPath: 'vendor/dice/', theme_surface: 'taverntable', volume: 100,
-          color_spotlight: 0xffffff, sounds: soundOn(), shadows: true, light_intensity: 0.85, gravity_multiplier: 400, baseScale: 100, strength: 1.4,
+          color_spotlight: 0xffffff, sounds: false, shadows: true, light_intensity: 0.85, gravity_multiplier: 400, baseScale: 100, strength: 1.4,
         });
         await box.initialize();
-        dice3d.soundsLoaded = soundOn();
+        attachSounds(box);
         // Cada dado recebe as cores do seu tipo e os números na fonte do jogo.
         const F = box.DiceFactory;
         const create = F.create.bind(F);
@@ -805,52 +814,83 @@
           if (def) def.font = "'KD Dice', 'Chakra Petch', sans-serif";
           return create(type);
         };
+        await colorSet(box, skinId(), 'd6');
+        await colorSet(box, skinId(), 'd10');
         dice3d.box = box;
         return box;
-      })().catch((e) => { dice3d.failed = true; if (dice3d.el) dice3d.el.remove(); throw e; });
+      })().catch((e) => { dice3d.failed = true; if (dice3d.el) dice3d.el.classList.remove('show'); throw e; });
     }
     return dice3d.loading;
   }
-  async function show3d(dice) {
-    const box = await getDiceBox();
-    await colorSet(box, skinId(), 'd6');
-    await colorSet(box, skinId(), 'd10');
-    box.sounds = soundOn();
-    if (box.sounds && !dice3d.soundsLoaded) {
-      try { await box.loadSounds(); dice3d.soundsLoaded = true; } catch (e) { box.sounds = false; }
+
+  // ----- sons -----
+  // Elementos de áudio criados na hora (sem esperar baixar); o navegador busca em segundo plano.
+  const SND = { pool: null, unlocked: false };
+  function soundPool() {
+    if (!SND.pool) {
+      const mk = (dir, name, n) => Array.from({ length: n }, (_, i) => {
+        const a = new Audio(`vendor/dice/sounds/${dir}/${name}${i + 1}.mp3`);
+        a.preload = 'auto';
+        return a;
+      });
+      SND.pool = { table: mk('surfaces', 'surface_wood_table', 7), plastic: mk('dicehit', 'dicehit_plastic', 15), coin: mk('dicehit', 'dicehit_coin', 6) };
     }
-    const d6 = dice.filter((x) => x.t === 6).map((x) => x.v);
-    const d10 = dice.filter((x) => x.t === 10).map((x) => x.v);
-    const parts = [];
-    if (d6.length) parts.push(`${d6.length}d6`);
-    if (d10.length) parts.push(`${d10.length}d10`);
-    const notation = `${parts.join('+')}@${[...d6, ...d10].join(',')}`;
-    const el = dice3d.el;
-    el.classList.add('show');
+    return SND.pool;
+  }
+  function attachSounds(box) {
+    const P = soundPool();
+    box.sounds_table = { wood_table: P.table };
+    box.sounds_dice = { plastic: P.plastic, coin: P.coin };
+    box.sound_dieMaterial = 'plastic';
+    box.surface = 'wood_table';
+  }
+  // Celulares (principalmente iPhone) só deixam tocar áudio iniciado por um toque.
+  // No primeiro toque em "Rolar", cada som é tocado mudo e pausado para ficar liberado.
+  function unlockAudio() {
+    if (SND.unlocked) return;
+    SND.unlocked = true;
+    const P = soundPool();
+    [...P.table, ...P.plastic, ...P.coin].forEach((a) => {
+      a.muted = true;
+      const pr = a.play();
+      const reset = () => { a.pause(); a.currentTime = 0; a.muted = false; };
+      if (pr && pr.then) pr.then(reset, () => { a.muted = false; }); else reset();
+    });
+  }
+  function playOne(list, vol) {
+    const a = list[Math.floor(Math.random() * list.length)];
+    try { a.currentTime = 0; a.volume = vol; a.play().catch(() => {}); } catch (e) { /* sem áudio */ }
+  }
+  function sound2d(n) {
+    const P = soundPool();
+    playOne(P.table, 0.8);
+    for (let i = 0; i < Math.min(n, 4); i++) setTimeout(() => playOne(P.plastic, 0.5), 60 + i * 70 + Math.random() * 60);
+  }
+
+  async function show3d(dice) {
+    const el = overlay3d();
+    el.classList.toggle('loading', !dice3d.box);
+    el.classList.add('show'); // aparece no mesmo instante do toque
     try {
+      const box = await getDiceBox();
+      el.classList.remove('loading');
+      await colorSet(box, skinId(), 'd6');
+      await colorSet(box, skinId(), 'd10');
+      box.sounds = soundOn();
+      const d6 = dice.filter((x) => x.t === 6).map((x) => x.v);
+      const d10 = dice.filter((x) => x.t === 10).map((x) => x.v);
+      const parts = [];
+      if (d6.length) parts.push(`${d6.length}d6`);
+      if (d10.length) parts.push(`${d10.length}d10`);
+      const notation = `${parts.join('+')}@${[...d6, ...d10].join(',')}`;
       // box.roll só resolve quando todos os dados param (corpos "dormindo" na física).
       // O tempo limite é só uma trava de segurança caso algo trave.
       await Promise.race([box.roll(notation), wait(25000)]);
       await wait(700); // deixa os dados parados à vista antes de mostrar o total
-    } finally {
-      el.classList.remove('show');
       setTimeout(() => { try { box.clearDice(); } catch (e) { /* ok */ } }, 250);
+    } finally {
+      el.classList.remove('show', 'loading');
     }
-  }
-
-  // Som para os dados 2D (mesmos arquivos da mesa de madeira).
-  const sfx = { cache: {} };
-  function playSfx(file, vol) {
-    try {
-      const a = (sfx.cache[file] = sfx.cache[file] || new Audio(`vendor/dice/sounds/${file}`)).cloneNode();
-      a.volume = vol;
-      a.play().catch(() => {});
-    } catch (e) { /* sem áudio */ }
-  }
-  function sound2d(n) {
-    const pick = (k) => 1 + Math.floor(Math.random() * k);
-    playSfx(`surfaces/surface_wood_table${pick(7)}.mp3`, 0.8);
-    for (let i = 0; i < Math.min(n, 4); i++) setTimeout(() => playSfx(`dicehit/dicehit_plastic${pick(15)}.mp3`, 0.5), 60 + i * 70 + Math.random() * 60);
   }
 
   function doRoll() {
@@ -861,14 +901,18 @@
     for (let i = 0; i < p.n10; i++) dice.push({ v: d(10), t: 10 });
     const order = dice.map((x, i) => i).sort((a, b) => dice[b].v - dice[a].v || dice[a].t - dice[b].t);
     order.slice(0, 2).forEach((i) => { dice[i].sel = true; });
-    const result = { dice, extreme: p.extreme, rolling: true };
+    const three = want3d();
+    const result = { dice, extreme: p.extreme, rolling: true, three };
     r.result = result;
+    if (soundOn()) unlockAudio();
     if (navigator.vibrate) navigator.vibrate(30);
-    renderModal();
     const done = () => { result.rolling = false; if (ui.roll && ui.roll.result === result) renderModal(); };
-    if (want3d()) {
+    if (three) {
+      // Os dados 3D aparecem primeiro; o modal é atualizado depois.
       show3d(dice).catch(() => toast('Dados 3D indisponíveis neste aparelho — usando dados 2D.')).finally(done);
+      renderModal();
     } else {
+      renderModal();
       if (soundOn()) sound2d(dice.length);
       setTimeout(done, 450);
     }
@@ -940,7 +984,10 @@
 
     let result = '';
     if (res && res.rolling) {
-      result = `<div class="dice">${res.dice.map((x) => `<span class="die ${x.t === 10 ? 'd10' : ''} rolling">${d(x.t)}</span>`).join('')}</div>
+      // Nenhum número aparece até os dados pararem.
+      result = res.three
+        ? '<div class="verdict miss" style="padding:28px 0">Rolando...</div>'
+        : `<div class="dice">${res.dice.map((x) => `<span class="die ${x.t === 10 ? 'd10' : ''} rolling">?</span>`).join('')}</div>
         <div class="verdict miss">Rolando...</div>`;
     } else if (res) {
       const notes = [];
@@ -1439,6 +1486,8 @@
   // ---------- início ----------
   store = load();
   render();
+  // Prepara os dados 3D logo após abrir o app, para a primeira rolagem já sair na hora.
+  setTimeout(() => { if (want3d()) getDiceBox().catch(() => {}); }, 800);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
