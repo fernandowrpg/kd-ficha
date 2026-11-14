@@ -593,3 +593,8 @@ body.mode-edit .play-only { display: none !important; }
 .cc-meta { margin-top: auto; padding-top: 8px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; font-size: 12px; font-weight: 700; color: var(--primary-text); }
 .home-hint { margin-top: 16px; }
 .home-page { padding-bottom: 24px; }
+.cc-vigor { position: relative; display: block; height: 22px; margin-top: 8px; border-radius: var(--radius); overflow: hidden; background: var(--steel-700); }
+.cc-vigor .fill { position: absolute; inset: 0 auto 0 0; background: var(--primary-bg-dark); }
+.cc-vigor .txt { position: relative; display: flex; align-items: center; justify-content: space-between; height: 100%; padding: 0 8px; color: var(--steel-0); font-size: 12px; }
+.cc-vigor small { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; opacity: .85; }
+.cc-vigor b { font-size: 13px; }

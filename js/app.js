@@ -354,7 +354,11 @@
         <span class="cc-body">
           <span class="cc-nm">${esc(c.nome) || 'Sem nome'}</span>
           <span class="cc-cc">${esc(c.conceito) || '—'}</span>
-          <span class="cc-meta"><span>${esc(c.estilo.nome) || 'Sem estilo'}</span><span>Vigor ${vig}/${D.vigorMax}</span></span>
+          <span class="cc-meta"><span>${esc(c.estilo.nome) || 'Sem estilo'}</span></span>
+          <span class="cc-vigor" role="img" aria-label="Vigor ${vig} de ${D.vigorMax}">
+            <span class="fill" style="width:${D.vigorMax ? Math.round((clamp(vig, 0, D.vigorMax) / D.vigorMax) * 100) : 0}%"></span>
+            <span class="txt"><small>Vigor</small><b>${vig}/${D.vigorMax}</b></span>
+          </span>
         </span>
       </button>`;
     }).join('');
