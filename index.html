@@ -15,6 +15,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+  <script>
+    // Aplica o tema antes de pintar (evita piscar claro→escuro).
+    (function () {
+      var t = null;
+      try { t = JSON.parse(localStorage.getItem('kd-tema') || 'null'); } catch (e) {}
+      var tema = t && t.tema ? t.tema : (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', tema);
+    })();
+  </script>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>

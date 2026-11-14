@@ -1,5 +1,5 @@
 // Service worker: deixa o app funcionando offline na mesa de jogo.
-const CACHE = 'kd-ficha-v12';
+const CACHE = 'kd-ficha-v13';
 const ASSETS = [
   './', 'index.html', 'css/style.css', 'js/data.js', 'js/tecnicas.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',

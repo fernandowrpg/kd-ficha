@@ -63,3 +63,12 @@ export async function baixarTodas() {
   return snap.docs.map((d) => d.data().ficha).filter((f) => f && f.id);
 }
 export const apagar = (id) => fs.deleteDoc(fs.doc(col(uid()), id));
+
+// Preferências do usuário (por enquanto só o tema) em users/{uid}.
+export async function lerPrefs() {
+  const snap = await fs.getDoc(fs.doc(db, 'users', uid()));
+  if (!snap.exists()) return null;
+  const d = snap.data();
+  return { tema: d.tema, t: d.updatedAt ? d.updatedAt.toMillis() : 0 };
+}
+export const salvarPrefs = (tema) => fs.setDoc(fs.doc(db, 'users', uid()), { tema, updatedAt: fs.serverTimestamp() });

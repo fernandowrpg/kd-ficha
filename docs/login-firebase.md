@@ -53,6 +53,10 @@ O popup precisa abrir colado ao toque do usuário. Por isso o app já baixa o Fi
 ### Dados
 
 ```
+users/{uid}
+  tema:       "light" | "dark"   (tema escolhido no botão do canto superior direito)
+  updatedAt:  timestamp do servidor
+
 users/{uid}/fichas/{fichaId}
   ficha:      { ...a ficha inteira, igual ao .json exportado, com "upd" }
   updatedAt:  timestamp do servidor
@@ -68,6 +72,7 @@ users/{uid}/fichas/{fichaId}
 - **Ao terminar uma edição** (voltar para "Jogar", ir para o início ou trocar de ficha), o envio é imediato e aparece o aviso "Ficha salva na nuvem".
 - **Ao excluir uma ficha**, ela também é apagada da nuvem.
 - **Fichas nunca editadas** (sem `upd`) não são enviadas.
+- **Tema claro/escuro**: fica no aparelho (`kd-tema` no `localStorage`) e, com login, em `users/{uid}`. Ao entrar, vale a escolha mais recente: a da conta é aplicada, ou a deste aparelho é enviada. Sem escolha salva, segue o tema do sistema.
 - **Indicador na barra do topo** (sempre visível, no início e na ficha):
 
   | Indicador | Significado |
@@ -88,6 +93,10 @@ users/{uid}/fichas/{fichaId}
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if isOwner(uid) && validPrefs();
+    }
     match /users/{uid}/fichas/{fichaId} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid) && validFicha();
@@ -103,6 +112,11 @@ service cloud.firestore {
       return d.keys().hasOnly(['ficha', 'updatedAt', 'v']) && d.ficha is map
         && d.ficha.nome is string && d.ficha.nome.size() <= 200
         && d.updatedAt == request.time && d.v == 1;
+    }
+    function validPrefs() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['tema', 'updatedAt']) && d.tema in ['light', 'dark']
+        && d.updatedAt == request.time;
     }
   }
 }

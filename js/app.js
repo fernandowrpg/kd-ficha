@@ -38,6 +38,7 @@
     down: svg('<path d="M12 4v12M6 10l6 6 6-6M4 20h16"/>'),
     up: svg('<path d="M12 16V4M6 10l6-6 6 6M4 20h16"/>'),
     trash: svg('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>'),
+    moon: svg('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'),
     sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
     info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>'),
     arrowUp: svg('<path d="M12 19V5M6 11l6-6 6 6"/>'),
@@ -269,7 +270,7 @@
     if (onHome()) {
       return `<header class="appbar">
       <button class="icon-btn" data-act="open-menu" aria-label="Menu">${I.menu}</button>${brand}
-      ${cloudChip()}
+      ${cloudChip()}${themeBtn()}
     </header>`;
     }
     return `<header class="appbar">
@@ -280,7 +281,43 @@
         <button data-act="mode" data-v="play" aria-pressed="${!edit}">Jogar</button>
         <button data-act="mode" data-v="edit" aria-pressed="${edit}">Editar</button>
       </div>
+      ${themeBtn()}
     </header>`;
+  }
+
+  // ---------- tema claro/escuro ----------
+  // Fica no localStorage ("kd-tema", lido também no <head> para não piscar) e, com login,
+  // em users/{uid} no Firestore. Vale a escolha mais recente.
+  const TEMA_KEY = 'kd-tema';
+  const temaAtual = () => document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  function lerTemaLocal() {
+    try { return JSON.parse(localStorage.getItem(TEMA_KEY) || 'null'); } catch (e) { return null; }
+  }
+  function aplicarTema(tema, t) {
+    document.documentElement.setAttribute('data-theme', tema);
+    try { localStorage.setItem(TEMA_KEY, JSON.stringify({ tema, t: t || Date.now() })); } catch (e) { /* ok */ }
+    const b = document.getElementById('theme-btn');
+    if (b) b.outerHTML = themeBtn();
+  }
+  function themeBtn() {
+    const dark = temaAtual() === 'dark';
+    const lbl = dark ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
+    return `<button class="icon-btn theme-btn" id="theme-btn" data-act="theme" aria-label="${lbl}" title="${lbl}">${dark ? I.sun : I.moon}</button>`;
+  }
+  function trocarTema() {
+    const tema = temaAtual() === 'dark' ? 'light' : 'dark';
+    aplicarTema(tema);
+    if (ui.cloud) getNuvem().then((n) => n.salvarPrefs(tema)).catch(() => {});
+  }
+  // Ao entrar: traz o tema da conta, ou envia o deste aparelho se for mais recente.
+  async function sincronizarTema(n) {
+    const local = lerTemaLocal();
+    const remoto = await n.lerPrefs();
+    if (remoto && remoto.tema && (!local || remoto.t >= (local.t || 0))) {
+      if (remoto.tema !== temaAtual()) aplicarTema(remoto.tema, remoto.t);
+    } else if (local && local.tema) {
+      await n.salvarPrefs(local.tema);
+    }
   }
 
   // Indicador da nuvem sempre visível na barra do topo.
@@ -1224,6 +1261,7 @@
         if (!ui.cloud && navigator.onLine) getNuvem().catch(() => {});
         break;
       case 'login': entrarNuvem(); break;
+      case 'theme': trocarTema(); break;
       case 'cloud':
         if (ui.cloud) { if (ui.cloudState === 'pending') salvarNaNuvem(); else openModal({ type: 'menu' }); }
         else if (ui.cloudState !== 'checking') entrarNuvem();
@@ -1380,7 +1418,7 @@
           type: 'confirm', title: 'Fim da sessão', ok: `Ganhar ${tot} karma`,
           body: `<div class="stack"><div class="kv"><span>Eventos do caminho marcados</span><b>${ev}</b></div><div class="kv"><span>Laços marcados</span><b>${la}</b></div>
             ${rev ? '<div class="kv"><span>Reviravolta (escolha um novo caminho)</span><b>2</b></div>' : ''}
-            <div class="kv"><span>Participação na sessão</span><b>1</b></div><div class="kv" style="border-top:1px solid var(--steel-100);padding-top:8px"><span><b>Total</b></span><b>${tot}</b></div>
+            <div class="kv"><span>Participação na sessão</span><b>1</b></div><div class="kv" style="border-top:1px solid var(--line);padding-top:8px"><span><b>Total</b></span><b>${tot}</b></div>
             <p class="hint" style="margin:0">As marcas de caminho e laços serão limpas e a Tensão volta a 2. Karma de aprendizado, tensão voluntária ou do leitor você ajusta na Mesa.</p></div>`,
           onOk: () => {
             c.estado.karma += tot;
@@ -1597,7 +1635,7 @@
           try { marcado = !!localStorage.getItem(NV_KEY); } catch (e) { /* ok */ }
           if (u) {
             try { localStorage.setItem(NV_KEY, '1'); } catch (e) { /* ok */ }
-            if (!was) { setCloud('saving'); sincronizar(); }
+            if (!was) { setCloud('saving'); sincronizar(); sincronizarTema(n).catch(() => {}); }
           } else if (marcado) {
             // Já tinha entrado neste aparelho, mas a sessão não voltou: avisa bem visível.
             setCloud('lost');
