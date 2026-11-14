@@ -4,10 +4,11 @@
 // Firestore (cada usuário só acessa users/{uid}/fichas) e os domínios autorizados.
 const V = '13.3.0';
 const base = `https://www.gstatic.com/firebasejs/${V}`;
-const [{ initializeApp }, auth, fs] = await Promise.all([
+const [{ initializeApp }, auth, fs, ac] = await Promise.all([
   import(`${base}/firebase-app.js`),
   import(`${base}/firebase-auth.js`),
   import(`${base}/firebase-firestore.js`),
+  import(`${base}/firebase-app-check.js`),
 ]);
 
 const app = initializeApp({
@@ -17,6 +18,16 @@ const app = initializeApp({
   storageBucket: 'kd-ficha.firebasestorage.app',
   messagingSenderId: '572775102420',
   appId: '1:572775102420:web:46990930636d9a92854841',
+});
+
+// App Check: prova para o Firebase que a requisição vem deste site (reCAPTCHA Enterprise,
+// sem desafio). A chave do site é pública. Em localhost o reCAPTCHA não vale, então usa o
+// token de depuração: o console do navegador mostra um token para cadastrar em
+// Firebase > App Check > Apps > Gerenciar tokens de depuração.
+if (['localhost', '127.0.0.1'].includes(location.hostname)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+ac.initializeAppCheck(app, {
+  provider: new ac.ReCaptchaEnterpriseProvider('6LcKJCAuAAAAAAnIjV-5HzBFHFHlKxSpDzZXPWW6'),
+  isTokenAutoRefreshEnabled: true,
 });
 
 const a = auth.getAuth(app);
