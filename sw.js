@@ -1,9 +1,9 @@
 // Service worker: deixa o app funcionando offline na mesa de jogo.
-const CACHE = 'kd-ficha-v7';
+const CACHE = 'kd-ficha-v8';
 const ASSETS = [
   './', 'index.html', 'css/style.css', 'js/data.js', 'js/tecnicas.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  'vendor/dice-box-threejs.umd.js', 'fonts/ChakraPetch-Bold-latin.woff2',
+  'js/pdf.js', 'vendor/jspdf.umd.min.js', 'vendor/dice-box-threejs.umd.js', 'fonts/ChakraPetch-Bold-latin.woff2',
   'vendor/dice/sounds/dicehit/dicehit_coin1.mp3',
   'vendor/dice/sounds/dicehit/dicehit_coin2.mp3',
   'vendor/dice/sounds/dicehit/dicehit_coin3.mp3',

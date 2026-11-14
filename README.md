@@ -21,7 +21,7 @@ Construtor de fichas de **A Lenda do Dragão de Fogo: Karyu Densetsu** para mont
   - Mostra o efeito de sincronização quando ele é ativado.
 - **Dados 3D:** animação com física e 3 skins nas cores do style guide (Karyu, Aço, Brasa). Pode ser desligada.
 - **Mesa:** nova rodada, nova cena, fim de sessão (cálculo de karma), Tensão, Karma e poder das emoções (Esperança, Confiança…).
-- **Várias fichas** no mesmo aparelho, com exportar/importar `.json`.
+- **Várias fichas** no mesmo aparelho, com exportar/importar `.json` e exportar em **PDF** (A4, pronto para imprimir).
 - **Som dos dados** (mesa de madeira), com opção de desligar.
 - **PWA:** dá para instalar na tela inicial, funciona offline e pode manter a tela ligada durante o jogo.
 
@@ -53,7 +53,8 @@ css/style.css           tokens do style guide e componentes
 js/app.js               estado, regras, render, rolador, mesa
 js/data.js              atributos, ocupações, estilos, caminhos, trunfos, upgrades
 js/tecnicas.js          catálogo de técnicas
-vendor/                 dice-box-threejs (UMD, inclui three.js e cannon-es)
+js/pdf.js               exportador da ficha em PDF (carregado sob demanda)
+vendor/                 dice-box-threejs (UMD, inclui three.js e cannon-es) e jsPDF (MIT)
 fonts/                  Chakra Petch Bold (números dos dados 3D, OFL)
 sw.js, manifest.webmanifest, icons/   PWA
 ```

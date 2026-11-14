@@ -43,6 +43,7 @@
     arrowUp: svg('<path d="M12 19V5M6 11l6-6 6 6"/>'),
     arrowDown: svg('<path d="M12 5v14M6 13l6 6 6-6"/>'),
     star: svg('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>'),
+    file: svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'),
     table: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   };
 
@@ -616,6 +617,7 @@
         <button class="menu-item" data-act="new-char">${I.add} Nova ficha em branco</button>
         <button class="menu-item" data-act="dup-char">${I.copy} Duplicar esta ficha</button>
         <button class="menu-item" data-act="export-char">${I.down} Exportar ficha (.json)</button>
+        <button class="menu-item" data-act="export-pdf">${I.file} Exportar ficha (.pdf)</button>
         <button class="menu-item" data-act="import-char">${I.up} Importar ficha (.json)</button>
         <button class="menu-item" data-act="del-char">${I.trash} Excluir esta ficha</button>
         <div class="menu-sep"></div>
@@ -634,7 +636,7 @@
         <p style="margin:0"><b>Editar</b>: monte o protagonista — atributos, estilo, ocupações, trunfos, caminho, laços e técnicas. Os limiares e o Vigor são calculados automaticamente e o painel “Criação” mostra os pontos usados.</p>
         <p style="margin:0"><b>Jogar</b>: toque em um atributo, estilo ou ocupação para rolar. Toque na técnica para ver detalhes e em “Usar técnica” para gastar nagen e sincronização. A barra inferior mostra Sincronização, Nagen da rodada e Ações extras — toque nela para abrir a Mesa (nova rodada, nova cena, fim de sessão, poder das emoções).</p>
         <p style="margin:0"><b>Dados</b>: o app separa os dois maiores; toque em um dado para trocar a seleção. 6+ fora do total vira Sincronização, 1 fora do total vira Tensão. Nada muda na ficha até você tocar em “Aplicar”.</p>
-        <p style="margin:0">Tudo fica salvo neste aparelho. Use “Exportar” para guardar um backup ou passar a ficha para outro celular. Funciona offline depois do primeiro acesso.</p>
+        <p style="margin:0">Tudo fica salvo neste aparelho. Use “Exportar (.json)” para guardar um backup ou passar a ficha para outro celular, e “Exportar (.pdf)” para imprimir ou compartilhar. Funciona offline depois do primeiro acesso.</p>
         <button class="btn light" data-act="credits">${I.star} Ver créditos</button>
       </div></div></div>`;
   }
@@ -656,6 +658,7 @@
           <ul>
             <li><b>dice-box-threejs</b> (3d-dice / Frank Ali) — dados 3D, licença MIT, com <b>three.js</b> e <b>cannon-es</b> (MIT).</li>
             <li>Sons dos dados — acompanham o dice-box-threejs.</li>
+            <li><b>jsPDF</b> (James Hall, yWorks) — exportação da ficha em PDF, licença MIT.</li>
             <li>Fontes <b>Permanent Marker</b> (Font Diner, Apache 2.0) e <b>Chakra Petch</b> (Cadson Demak, OFL 1.1).</li>
           </ul>
         </div>
@@ -1369,6 +1372,7 @@
         break;
       }
       case 'export-char': exportChar(c); break;
+      case 'export-pdf': closeModal(); exportPdf(c); break;
       case 'import-char': $('#import-file')?.click(); break;
       case 'del-char':
         openModal({
@@ -1434,14 +1438,35 @@
   });
 
   // ---------- importar / exportar ----------
+  const fileBase = (c) => (c.nome || 'ficha').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ficha';
+  // No celular abre o menu de compartilhar; no computador baixa o arquivo.
+  function shareOrDownload(blob, name, title) {
+    const file = typeof File === 'function' ? new File([blob], name, { type: blob.type }) : null;
+    if (file && navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      navigator.share({ files: [file], title }).catch((e) => { if (!e || e.name !== 'AbortError') download(blob, name); });
+    } else download(blob, name);
+  }
   function exportChar(c) {
     const data = JSON.stringify({ app: 'karyu-densetsu-ficha', version: 1, ficha: c }, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const name = `${(c.nome || 'ficha').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ficha'}.json`;
-    const file = typeof File === 'function' ? new File([blob], name, { type: 'application/json' }) : null;
-    if (file && navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
-      navigator.share({ files: [file], title: c.nome || 'Ficha' }).catch(() => download(blob, name));
-    } else download(blob, name);
+    shareOrDownload(new Blob([data], { type: 'application/json' }), `${fileBase(c)}.json`, c.nome || 'Ficha');
+  }
+  let pdfLoading = null;
+  async function exportPdf(c) {
+    toast('Gerando o PDF...');
+    try {
+      if (!pdfLoading) {
+        pdfLoading = (async () => {
+          if (!window.jspdf) await loadScript('vendor/jspdf.umd.min.js');
+          if (!window.KD_PDF) await loadScript('js/pdf.js');
+        })().catch((e) => { pdfLoading = null; throw e; });
+      }
+      await pdfLoading;
+      ensureFeri(c);
+      const doc = window.KD_PDF.build(c, derived(c), KD, { tecCost });
+      shareOrDownload(doc.output('blob'), `${fileBase(c)}.pdf`, c.nome || 'Ficha');
+    } catch (e) {
+      toast('Não foi possível gerar o PDF. Verifique a conexão e tente de novo.');
+    }
   }
   function download(blob, name) {
     const a = document.createElement('a');
