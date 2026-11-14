@@ -24,6 +24,11 @@ Construtor de fichas de **A Lenda do Dragão de Fogo: Karyu Densetsu** para mont
 - **Mesa:** nova rodada, nova cena, fim de sessão (cálculo de karma), Tensão, Karma e poder das emoções (Esperança, Confiança…).
 - **Várias fichas** no mesmo aparelho, com exportar/importar `.json` e exportar em **PDF** (A4, pronto para imprimir).
 - **Login com Google (opcional):** salva as fichas na nuvem (Firebase/Firestore) e sincroniza entre aparelhos; ao terminar uma edição (voltar para “Jogar”, ir ao início ou trocar de ficha) a ficha é enviada na hora. Sem login, tudo continua só no aparelho. Detalhes em `docs/login-firebase.md`.
+- **Modo narrador (mesas, precisa de login):**
+  - O narrador cria uma mesa pelo menu e compartilha o link do convite.
+  - Cada jogador abre o link, entra com Google e escolhe o protagonista; o narrador aceita, recusa ou remove cada um.
+  - Na sessão, o narrador vê o cartão de resumo de cada jogador (Vigor, ferimentos, sinc, nagen, ações, tensão, karma, limiares) e a ficha completa, atualizados em tempo real.
+  - **Overlay para o OBS** (`obs.html?sala=…`, fonte de navegador com fundo transparente) e **API JSON** só leitura com os resumos. Detalhes em `docs/login-firebase.md`.
 - **Som dos dados** (mesa de madeira), com opção de desligar.
 - **PWA:** dá para instalar na tela inicial, funciona offline e pode manter a tela ligada durante o jogo.
 
@@ -56,7 +61,9 @@ js/app.js               estado, regras, render, rolador, mesa
 js/data.js              atributos, ocupações, estilos, caminhos, trunfos, upgrades
 js/tecnicas.js          catálogo de técnicas
 js/pdf.js               exportador da ficha em PDF (carregado sob demanda)
-js/nuvem.js             login com Google e sincronização no Firestore (carregado sob demanda)
+js/fb.js                inicialização do Firebase (App Check + Firestore), comum ao app e ao overlay
+js/nuvem.js             login com Google, sincronização e mesas no Firestore (carregado sob demanda)
+obs.html, js/obs.js, js/painel.js, css/obs.css   overlay da mesa para o OBS
 vendor/                 dice-box-threejs (UMD, inclui three.js e cannon-es) e jsPDF (MIT)
 fonts/                  Chakra Petch Bold (números dos dados 3D, OFL)
 sw.js, manifest.webmanifest, icons/   PWA

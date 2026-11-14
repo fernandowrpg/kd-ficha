@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Karyu Densetsu — Overlay da mesa</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&family=Permanent+Marker&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/obs.css">
+</head>
+<body>
+  <!-- Overlay para o OBS (fonte de navegador). Parâmetros:
+       sala=<id> (obrigatório) · layout=linha|coluna|compacto · jogador=<uid>
+       tema=escuro|claro · escala=1.5 · fundo=1 · ocultar=limiares,stats,ferimentos,conceito,jogador -->
+  <div id="kd-overlay" class="kd-overlay" aria-live="polite"></div>
+  <script type="module" src="js/obs.js"></script>
+</body>
+</html>

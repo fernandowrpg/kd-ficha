@@ -598,3 +598,93 @@ body.mode-edit .play-only { display: none !important; }
 .cc-vigor .txt { position: relative; display: flex; align-items: center; justify-content: space-between; height: 100%; padding: 0 8px; color: var(--steel-0); font-size: 12px; }
 .cc-vigor small { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; opacity: .85; }
 .cc-vigor b { font-size: 13px; }
+
+/* ---------- Mesas (jogador) e modo narrador ---------- */
+.home.mesas { padding-top: 0; }
+.cc-mesa { display: inline-flex; align-items: center; gap: 3px; color: var(--text-secondary); }
+.cc-mesa svg { width: 14px; height: 14px; }
+.mesa-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%; text-align: left;
+  padding: 10px 12px; background: var(--neutral-bg-base); border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line);
+}
+.mesa-pick:hover { box-shadow: 0 0 0 1px var(--primary-divider); background: var(--subtle); }
+.mr-info { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 2px; }
+.mr-info b { font-size: 16px; overflow-wrap: anywhere; }
+.mr-info small { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.mr-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.chev-r svg { width: 20px; height: 20px; transform: rotate(180deg); color: var(--primary-text); }
+.st-badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; padding: 3px 8px; border-radius: var(--radius); background: var(--neutral-bg-light); color: var(--text-secondary); white-space: nowrap; }
+.st-badge.st-aceito { background: var(--ok-bg); color: var(--ok-text); }
+.st-badge.st-pendente { background: var(--tint-strong); color: var(--primary-text); }
+
+.narr { display: flex; flex-direction: column; gap: 12px; }
+.narr .home-head { margin-bottom: 0; }
+.narr-head { justify-content: flex-start; align-items: center; }
+.narr-head .icon-btn { margin-left: -10px; color: var(--text-primary); flex: none; }
+.narr-head .icon-btn:hover { background: var(--subtle); }
+.narr-head .h1 { overflow-wrap: anywhere; }
+.narr-box { background: var(--neutral-bg-base); padding: 14px; border-radius: var(--radius); box-shadow: 0 0 0 1px var(--line); display: flex; flex-direction: column; gap: 12px; }
+.narr-box p { margin: 0; font-size: 14px; line-height: 19px; }
+.narr-box > .btn { align-self: flex-start; }
+.narr-new { display: flex; gap: 8px; }
+.narr-new .input { flex: 1; min-width: 0; }
+.narr-sub { margin-top: 8px; display: flex; align-items: baseline; gap: 8px; }
+.narr-sub .meta { font-family: var(--font-body); font-size: 14px; color: var(--text-secondary); }
+.link-row { display: flex; flex-direction: column; gap: 4px; }
+.lr-lbl { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+.lr-lbl svg { width: 16px; height: 16px; color: var(--primary-text); }
+.lr-ctl { display: flex; gap: 6px; }
+.lr-ctl .input { flex: 1; min-width: 0; font-size: 13px; padding-top: 6px; padding-bottom: 6px; }
+.lr-ctl .btn { flex: none; text-decoration: none; }
+.api-help { font-size: 13px; line-height: 18px; color: var(--text-secondary); }
+.api-help summary { cursor: pointer; font-weight: 700; color: var(--primary-text); }
+.api-help[open] summary { margin-bottom: 8px; }
+.api-help ul { margin: 6px 0 10px; padding-left: 18px; }
+.api-help p { margin: 6px 0; font-size: 13px; }
+.api-help code { font-size: 12px; background: var(--subtle); padding: 0 3px; border-radius: 2px; color: var(--text-primary); }
+.api-help .link-row { margin-bottom: 6px; }
+.pedido { box-shadow: 0 0 0 1px var(--primary-divider); background: var(--tint); }
+.narr-foot { display: flex; justify-content: flex-end; margin-top: 12px; }
+
+/* Cartão de resumo do jogador */
+.resumo-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+@media (max-width: 479px) { .resumo-grid { grid-template-columns: 1fr; } }
+.resumo { background: var(--neutral-bg-base); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 1px 0 var(--line-strong), 0 0 0 1px var(--line); }
+.resumo .cc-head { gap: 10px; }
+.resumo.derrotado { opacity: .75; }
+.rs-who { flex: 1; min-width: 0; display: flex; flex-direction: column; color: var(--steel-0); }
+.rs-nm { font-family: var(--font-display); font-variant: small-caps; font-size: 20px; line-height: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-who small { font-size: 11px; color: var(--steel-300); text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resumo .cc-body { gap: 8px; }
+.resumo .cc-vigor { margin-top: 0; }
+.rs-feri { display: flex; align-items: center; gap: 4px; font-size: 11px; text-transform: uppercase; color: var(--text-secondary); }
+.rs-feri small { margin-right: 4px; font-size: 11px; }
+.rs-feri i { width: 14px; height: 14px; border: 2px solid var(--neutral-interactive); border-radius: 2px; }
+.rs-feri i.on { background: var(--primary-bg-dark); border-color: var(--primary-bg-dark); }
+.rs-feri b { margin-left: auto; color: var(--primary-text); }
+.rs-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.rs-stat { display: flex; flex-direction: column; align-items: center; padding: 4px 0; background: var(--neutral-bg-light); border-radius: var(--radius); }
+.rs-stat small { font-size: 9px; text-transform: uppercase; letter-spacing: .3px; color: var(--text-secondary); }
+.rs-stat b { font-size: 15px; line-height: 18px; }
+.rs-stat.warn { background: var(--primary-bg-dark); color: var(--steel-0); }
+.rs-stat.warn small { color: var(--fiery-200); }
+.rs-lim { font-size: 12px; color: var(--text-secondary); }
+.rs-lim b { color: var(--text-primary); }
+.rs-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.rs-acts .btn:first-child { flex: 1; }
+
+/* Ficha de outro jogador (só leitura) */
+.narr-ver-bar { position: sticky; top: calc(var(--appbar-h) + env(safe-area-inset-top)); z-index: 5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px; background: var(--surface); box-shadow: 0 1px 0 var(--line-strong); font-size: 14px; color: var(--text-secondary); }
+.narr-ver-bar b { color: var(--text-primary); }
+.sheet-ro .tec-actions, .sheet-ro .vigor .circle-btn { visibility: hidden; }
+.sheet-ro .tec-actions { display: none; }
+.sheet-ro button:not(.tec-head):not(.more) { cursor: default; }
+.sheet-ro .textarea[readonly] { resize: none; }
+@media (min-width: 768px) { .narr-ver .sheet { margin-top: 24px; } }
+
+/* Convite */
+.join-sala { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.join-nome { font-family: var(--font-display); font-variant: small-caps; font-weight: 400; font-size: 24px !important; line-height: 26px; }
+.join-list { border-top: 1px solid var(--line); }
+.join-opt .chk { margin-left: auto; flex: none; }
+.join-opt[aria-checked="true"] { background: var(--tint); }

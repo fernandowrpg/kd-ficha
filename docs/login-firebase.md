@@ -18,6 +18,7 @@ Como o app faz login com Google e guarda as fichas na nuvem sendo um site estát
 | App Check com reCAPTCHA Enterprise | ✅ Registrado e no código |
 | **Bloqueio do App Check em Firestore e Authentication** | ⏳ **Falta:** ligar depois de conferir as métricas |
 | Teste das regras no Rules Playground | ⏳ Não feito (o app funcionando no site cobre o caso normal) |
+| **Regras das mesas (modo narrador)** | ⏳ **Falta:** publicar a versão nova da seção “Regras do Firestore” |
 
 Testado no site publicado: login, sincronização e envio da ficha ao terminar a edição funcionam com a chave restrita e o App Check ativo.
 
@@ -46,7 +47,9 @@ O popup precisa abrir colado ao toque do usuário. Por isso o app já baixa o Fi
 
 ### Arquivos
 
-- [`js/nuvem.js`](../js/nuvem.js) é o módulo ES que carrega o SDK do CDN, inicializa o App Check, o Auth e o Firestore, e exporta `entrar`, `sair`, `enviar`, `baixarTodas` e `apagar`.
+- [`js/fb.js`](../js/fb.js) carrega o SDK do CDN e inicializa o app, o App Check e o Firestore (usado pelo app e pelo overlay).
+- [`js/nuvem.js`](../js/nuvem.js) acrescenta o Auth e exporta `entrar`, `sair`, `enviar`, `baixarTodas`, `apagar` e as funções das mesas (`criarSala`, `pedirEntrada`, `ouvirMembros`…).
+- [`js/painel.js`](../js/painel.js) e [`js/obs.js`](../js/obs.js): leitura pública da mesa para o overlay [`obs.html`](../obs.html), sem login.
 - [`js/app.js`](../js/app.js) carrega o `nuvem.js` com `import()` **só quando precisa**: no clique em "Entrar com Google", ao abrir o menu, ou na abertura do app se a pessoa já tinha entrado naquele aparelho (marca `kd-nuvem` no `localStorage`). Quem nunca entra não baixa nada do Firebase.
 - [`sw.js`](../sw.js) guarda o `js/nuvem.js` no cache offline. Os scripts do Firebase (gstatic) e as chamadas aos servidores do Google não passam pelo cache: o login precisa de internet de qualquer jeito.
 
@@ -87,7 +90,26 @@ users/{uid}/fichas/{fichaId}
   Quando a sessão não volta, aparece também um aviso. Ao entrar de novo, as alterações feitas enquanto estava desconectado são enviadas, porque são mais novas que as da nuvem.
 - **Limitação conhecida:** se outro aparelho ainda tiver a ficha excluída, ele a envia de volta na próxima sincronização. Resolver isso exige guardar um registro das fichas excluídas.
 
-### Regras do Firestore (publicadas)
+### Mesas (modo narrador)
+
+```
+salas/{salaId}                 nome, mestre (uid do narrador), mestreNome, aberta, criadaEm, v
+salas/{salaId}/membros/{uid}   status ("pendente" | "aceito"), nome (conta Google), fichaId, ficha (completa), updatedAt, v
+salas/{salaId}/painel/{uid}    resumo público do protagonista aceito (nome, vigor, ferimentos, sinc, nagen…), updatedAt, v
+```
+
+- O narrador cria a mesa no app (menu → **Modo narrador**) e compartilha o link `…/#sala={salaId}`.
+- O jogador abre o link, entra com Google, escolhe um protagonista e cria `membros/{seu uid}` com `status: "pendente"` (só se a mesa estiver com `aberta: true`).
+- O narrador aceita (muda `status` para `"aceito"`) ou recusa/remove (apaga o documento). Ele vê os membros em tempo real (`onSnapshot`), com o cartão de resumo e a ficha completa (só leitura).
+- Enquanto está na mesa, cada alteração da ficha vai para `membros/{uid}` 1,2 s depois; se aceito, o resumo vai também para `painel/{uid}`. Se o jogador é removido, o app dele percebe e desliga a sincronização.
+- **Fichas completas** (`membros`) só são lidas pelo próprio jogador e pelo narrador da mesa. O **painel** é público para quem tem o código da mesa: é o que aparece na transmissão.
+- **Overlay do OBS**: `obs.html?sala={salaId}` lê `salas/{salaId}` e `painel` sem login (por isso o `allow read: if true`). Opções: `layout=linha|coluna|compacto`, `jogador={uid}`, `tema=claro|escuro`, `escala=1.5`, `fundo=1`, `ocultar=limiares,stats,ferimentos,conceito,jogador`. A página também publica os dados em `window.KD_MESA` e no evento `kd-mesa`.
+- **API (JSON)**: `GET https://firestore.googleapis.com/v1/projects/kd-ficha/databases/(default)/documents/salas/{salaId}/painel` devolve os resumos no formato REST do Firestore. Quando o bloqueio do App Check for ligado, chamadas REST sem token do App Check passam a ser recusadas; o overlay continua funcionando porque usa o SDK com App Check.
+- Um jogador removido pode pedir para entrar de novo enquanto a mesa estiver aberta; para impedir, o narrador desmarca “Aceitando novos jogadores”.
+
+### Regras do Firestore
+
+> ⏳ **Falta publicar** a versão com as mesas (Firebase → Firestore → Regras). Sem ela, criar mesa, entrar e o overlay dão “permissão negada”; o resto do app continua funcionando com as regras antigas.
 
 ```
 rules_version = '2';
@@ -101,11 +123,73 @@ service cloud.firestore {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid) && validFicha();
     }
+
+    // Mesas do modo narrador
+    match /salas/{salaId} {
+      allow get: if true;
+      allow list: if signedIn() && resource.data.mestre == request.auth.uid;
+      allow create: if signedIn() && validSala()
+        && request.resource.data.mestre == request.auth.uid
+        && request.resource.data.criadaEm == request.time;
+      allow update: if signedIn() && resource.data.mestre == request.auth.uid && validSala()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'aberta']);
+      allow delete: if signedIn() && resource.data.mestre == request.auth.uid;
+
+      match /membros/{uid} {
+        allow read: if isOwner(uid) || isMestreDe(salaId);
+        allow create: if isOwner(uid) && validMembro() && request.resource.data.status == 'pendente'
+          && get(/databases/$(database)/documents/salas/$(salaId)).data.aberta == true;
+        allow update: if (isOwner(uid) && validMembro() && request.resource.data.status == resource.data.status)
+          || (isMestreDe(salaId)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+              && request.resource.data.status in ['pendente', 'aceito']);
+        allow delete: if isOwner(uid) || isMestreDe(salaId);
+      }
+      match /painel/{uid} {
+        allow read: if true;
+        allow create, update: if validPainel()
+          && (isMestreDe(salaId) || (isOwner(uid) && membroAceito(salaId, uid)));
+        allow delete: if isOwner(uid) || isMestreDe(salaId);
+      }
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
+    function signedIn() {
+      return request.auth != null;
+    }
     function isOwner(uid) {
       return request.auth != null && request.auth.uid == uid;
+    }
+    function isMestreDe(salaId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/salas/$(salaId)).data.mestre == request.auth.uid;
+    }
+    function membroAceito(salaId, uid) {
+      return get(/databases/$(database)/documents/salas/$(salaId)/membros/$(uid)).data.status == 'aceito';
+    }
+    function validSala() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['nome', 'mestre', 'mestreNome', 'aberta', 'criadaEm', 'v'])
+        && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 80
+        && d.mestreNome is string && d.mestreNome.size() <= 100
+        && d.aberta is bool && d.v == 1;
+    }
+    function validMembro() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['status', 'nome', 'fichaId', 'ficha', 'updatedAt', 'v'])
+        && d.nome is string && d.nome.size() <= 100
+        && d.fichaId is string && d.fichaId.size() <= 64
+        && d.ficha is map && d.updatedAt == request.time && d.v == 1;
+    }
+    function validPainel() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['nome', 'conceito', 'jogador', 'aura', 'estilo', 'vigor', 'vigorMax',
+          'feri', 'derrotado', 'sinc', 'nagen', 'canal', 'acoes', 'acoesMax', 'tensao', 'karma',
+          'defesa', 'protecao', 'updatedAt', 'v'])
+        && d.nome is string && d.nome.size() <= 200
+        && d.updatedAt == request.time && d.v == 1;
     }
     function validFicha() {
       let d = request.resource.data;

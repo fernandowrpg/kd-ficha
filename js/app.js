@@ -50,6 +50,12 @@
     home: svg('<path d="M4 11l8-7 8 7M6 9.5V20h12V9.5"/>'),
     cloudOff: svg('<path d="M7 18a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 1.3-2.6M10.5 5.2A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1 2.3 8.3M3 3l18 18"/>'),
     table: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    users: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14a6.5 6.5 0 0 1 3.5 6"/>'),
+    link: svg('<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/>'),
+    tv: svg('<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>'),
+    back: svg('<path d="M15 5l-7 7 7 7"/>'),
+    eye: svg('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+    share: svg('<path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/>'),
   };
 
   // ---------- modelo ----------
@@ -118,11 +124,12 @@
           s.mode = s.mode === 'edit' ? 'edit' : 'play';
           s.view = 'home'; // o app sempre abre na lista de protagonistas
           s.settings = { dice3d: true, diceSkin: 'karyu', sound: true, ...(s.settings || {}) };
+          s.salas = s.salas && typeof s.salas === 'object' ? s.salas : {};
           return s;
         }
       }
     } catch (e) { /* armazenamento indisponível */ }
-    return { chars: {}, order: [], current: null, view: 'home', mode: 'play', settings: { dice3d: true, diceSkin: 'karyu', sound: true } };
+    return { chars: {}, order: [], current: null, view: 'home', mode: 'play', settings: { dice3d: true, diceSkin: 'karyu', sound: true }, salas: {} };
   }
   let saveTimer = null;
   function save(now) {
@@ -132,6 +139,7 @@
       try { localStorage.setItem(LS_KEY, JSON.stringify(store)); }
       catch (e) { toast('Não foi possível salvar neste navegador. Exporte a ficha pelo menu.'); }
       schedulePush();
+      agendarEnvioSalas();
     };
     if (now) run(); else saveTimer = setTimeout(run, 250);
   }
@@ -149,7 +157,12 @@
   }
 
   // estado efêmero da interface
-  const ui = { cloud: null, cloudState: 'off', open: {}, more: {}, modal: null, roll: null, pendingD10: 0, wake: null, catQuery: '', catTipo: null, catElem: null };
+  // ro: renderizando a ficha de outro jogador (só leitura, no modo narrador)
+  // narr: tela do narrador; join: convite aberto por link (#sala=...)
+  const ui = {
+    cloud: null, cloudState: 'off', open: {}, more: {}, modal: null, roll: null, pendingD10: 0, wake: null, catQuery: '', catTipo: null, catElem: null,
+    ro: false, narr: { salas: null, sala: null, salaDoc: null, membros: null, ver: null, unsub: [] }, join: null,
+  };
 
   // ---------- regras derivadas ----------
   function fx(c) {
@@ -231,11 +244,18 @@
   const app = $('#app');
   const modalRoot = $('#modal-root');
 
-  const onHome = () => store.view === 'home' || !ch();
+  // Telas sem ficha aberta: início, narrador e convite.
+  const onHome = () => store.view !== 'sheet' || !ch();
   function render() {
+    // Saiu da tela do narrador ou do convite: para de ouvir a mesa.
+    if (store.view !== 'narrador' && ui.narr.sala) fecharSala();
+    if (store.view !== 'entrar') ui.join = null;
     if (onHome()) {
       document.body.classList.remove('mode-edit', 'has-seg');
-      app.innerHTML = appbar() + `<main class="page home-page">${home()}</main>`;
+      const page = store.view === 'narrador' ? narradorPage() : store.view === 'entrar' ? entrarPage() : home();
+      app.innerHTML = appbar() + `<main class="page home-page">${page}</main>`;
+      // Ficha de outro jogador: só leitura.
+      app.querySelectorAll('.sheet-ro input, .sheet-ro textarea').forEach((x) => { x.readOnly = true; });
       renderModal();
       return;
     }
@@ -354,7 +374,7 @@
         <span class="cc-body">
           <span class="cc-nm">${esc(c.nome) || 'Sem nome'}</span>
           <span class="cc-cc">${esc(c.conceito) || '—'}</span>
-          <span class="cc-meta"><span>${esc(c.estilo.nome) || 'Sem estilo'}</span></span>
+          <span class="cc-meta"><span>${esc(c.estilo.nome) || 'Sem estilo'}</span>${salaDaFicha(id) ? `<span class="cc-mesa" title="Sincronizada com a mesa ${esc(store.salas[salaDaFicha(id)].nome)}">${I.users} Mesa</span>` : ''}</span>
           <span class="cc-vigor" role="img" aria-label="Vigor ${vig} de ${D.vigorMax}">
             <span class="fill" style="width:${D.vigorMax ? Math.round((clamp(vig, 0, D.vigorMax) / D.vigorMax) * 100) : 0}%"></span>
             <span class="txt"><small>Vigor</small><b>${vig}/${D.vigorMax}</b></span>
@@ -370,10 +390,299 @@
         ${cards}
       </div>
       ${n ? '' : `<p class="hint home-hint">Ainda não há fichas neste aparelho. Crie um protagonista${ui.cloud ? '' : ', importe um .json pelo menu ou entre com Google para trazer as fichas da nuvem'}.</p>`}
+    </section>${mesasJogador()}`;
+  }
+
+  // ---------- mesas: lado do jogador ----------
+  // store.salas = { [salaId]: { nome, mestre, fichaId, status: 'pendente' | 'aceito' } }
+  const STATUS_SALA = { pendente: 'Aguardando o narrador', aceito: 'Na mesa' };
+  const salaDaFicha = (id) => Object.keys(store.salas).find((s) => store.salas[s].fichaId === id);
+  function mesasJogador() {
+    const ids = Object.keys(store.salas);
+    if (!ids.length) return '';
+    return `<section class="home mesas">
+      <div class="home-head"><h2 class="h-section">Mesas</h2></div>
+      <div class="stack">${ids.map((id) => {
+        const s = store.salas[id], c = store.chars[s.fichaId];
+        return `<div class="mesa-row">
+          <span class="mr-info"><b>${esc(s.nome) || 'Mesa'}</b><small>${s.mestre ? `Narrador: ${esc(s.mestre)} · ` : ''}${c ? esc(c.nome) || 'Sem nome' : 'ficha não está neste aparelho'}</small></span>
+          <span class="st-badge st-${esc(s.status)}">${STATUS_SALA[s.status] || esc(s.status)}</span>
+          <button class="btn light sm" data-act="sala-sair" data-id="${esc(id)}">Sair</button>
+        </div>`;
+      }).join('')}</div>
+      ${ui.cloud ? '' : '<p class="hint">Entre com Google para sincronizar a ficha com a mesa.</p>'}
     </section>`;
   }
 
-  const isEdit = () => store.mode === 'edit';
+  // Resumo público do protagonista: vai para o painel do narrador e para o overlay do OBS.
+  function resumo(c, jogador) {
+    ensureFeri(c);
+    const D = derived(c), e = c.estado;
+    return {
+      nome: (c.nome || 'Sem nome').slice(0, 200), conceito: c.conceito || '', jogador: jogador || '', aura: c.aura, estilo: c.estilo.nome || '',
+      vigor: clamp(e.vigor == null ? D.vigorMax : e.vigor, 0, D.vigorMax), vigorMax: D.vigorMax, feri: e.feri.slice(), derrotado: !!e.derrotado,
+      sinc: e.sinc, nagen: e.nagen, canal: D.canal, acoes: e.acoes, acoesMax: D.acoes, tensao: e.tensao, karma: e.karma,
+      defesa: D.defesa, protecao: D.protecao,
+    };
+  }
+
+  // Envia a ficha ligada a cada mesa (e o resumo, se o jogador já foi aceito).
+  const salaSent = {};
+  const salaSubs = {};
+  let salaTimer = null;
+  function agendarEnvioSalas() {
+    if (!ui.cloud || !Object.keys(store.salas).length) return;
+    clearTimeout(salaTimer);
+    salaTimer = setTimeout(() => { salaTimer = null; enviarSalas(); }, 1200);
+  }
+  async function enviarSalas(soId, forcar) {
+    let n;
+    try { n = await getNuvem(); } catch (e) { return; }
+    if (!n.user()) return;
+    for (const [id, s] of Object.entries(store.salas)) {
+      if (soId && id !== soId) continue;
+      const c = store.chars[s.fichaId];
+      if (!c) continue;
+      const r = s.status === 'aceito' ? resumo(c, ui.cloud && ui.cloud.nome) : null;
+      const j = JSON.stringify(c) + s.status;
+      if (!forcar && salaSent[id] === j) continue;
+      try { await n.enviarFichaSala(id, c, r); salaSent[id] = j; } catch (e) { /* tenta de novo na próxima alteração */ }
+    }
+  }
+  function iniciarSalasJogador() {
+    if (!ui.cloud) return;
+    getNuvem().then((n) => {
+      Object.keys(store.salas).forEach((id) => ouvirSalaJogador(n, id));
+      enviarSalas(null, true);
+    }).catch(() => {});
+  }
+  function ouvirSalaJogador(n, id) {
+    if (salaSubs[id]) return;
+    salaSubs[id] = n.ouvirMeuMembro(id, (d) => {
+      const s = store.salas[id];
+      if (!s) return;
+      if (!d) {
+        pararSalaJogador(id);
+        delete store.salas[id];
+        save(true);
+        toast(`Você não está mais na mesa ${s.nome || ''}.`);
+        if (onHome()) render();
+        return;
+      }
+      if (d.status === s.status) return;
+      s.status = d.status;
+      save(true);
+      if (d.status === 'aceito') { toast(`O narrador aceitou você na mesa ${s.nome || ''}!`); enviarSalas(id, true); }
+      if (onHome()) render();
+    }, () => { /* sem permissão ou offline: tenta de novo ao reconectar */ pararSalaJogador(id); });
+  }
+  function pararSalaJogador(id) {
+    if (salaSubs[id]) { try { salaSubs[id](); } catch (e) { /* ok */ } delete salaSubs[id]; }
+  }
+
+  // Convite aberto por link: index.html#sala=<id>
+  function lerConvite() {
+    const m = /[#&]sala=([\w-]{6,64})/.exec(location.hash);
+    if (!m) return false;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* ok */ }
+    ui.join = { id: m[1], sala: undefined, ficha: null, enviando: false };
+    store.view = 'entrar';
+    carregarConvite();
+    return true;
+  }
+  function carregarConvite() {
+    const J = ui.join;
+    if (!J) return;
+    J.sala = undefined;
+    getNuvem().then((n) => n.lerSala(J.id)).then((s) => { if (ui.join === J) { J.sala = s; render(); } })
+      .catch(() => { if (ui.join === J) { J.sala = 'erro'; render(); } });
+  }
+  function entrarPage() {
+    const J = ui.join;
+    if (!J) { store.view = 'home'; return home(); }
+    const wrap = (body) => `<section class="home narr">
+      <div class="home-head narr-head"><button class="icon-btn" data-act="home" aria-label="Voltar ao início">${I.back}</button><h1 class="h1">Convite para mesa</h1></div>
+      <div class="narr-box">${body}</div></section>`;
+    if (J.sala === undefined) return wrap('<p class="hint">Carregando o convite…</p>');
+    if (J.sala === 'erro') return wrap(`<p>Não foi possível abrir o convite. Verifique a conexão.</p><button class="btn primary" data-act="join-retry">Tentar de novo</button>`);
+    if (J.sala === null) return wrap('<p>Mesa não encontrada. O link pode estar errado ou a mesa foi excluída.</p>');
+    const s = J.sala;
+    const topo = `<div class="join-sala"><span class="mr-info"><b class="join-nome">${esc(s.nome)}</b><small>Narrador: ${esc(s.mestreNome) || '—'}</small></span></div>`;
+    if (!ui.cloud) {
+      return wrap(`${topo}<p>Entre com Google para participar. Sua ficha fica sincronizada com o narrador enquanto você estiver na mesa.</p>
+        ${ui.cloudState === 'checking' ? '<p class="hint">Conectando…</p>' : `<button class="btn primary" data-act="login">${I.cloud} Entrar com Google</button>`}`);
+    }
+    if (s.mestre === ui.cloud.uid) return wrap(`${topo}<p>Você é o narrador desta mesa.</p><button class="btn primary" data-act="narr-abrir" data-id="${esc(s.id)}">${I.users} Abrir no modo narrador</button>`);
+    const ja = store.salas[s.id];
+    if (ja) {
+      const c = store.chars[ja.fichaId];
+      return wrap(`${topo}<p>Você já está nesta mesa com <b>${c ? esc(c.nome) || 'Sem nome' : 'uma ficha'}</b>: <span class="st-badge st-${esc(ja.status)}">${STATUS_SALA[ja.status] || esc(ja.status)}</span></p><button class="btn primary" data-act="home">${I.home} Ir para o início</button>`);
+    }
+    if (!s.aberta) return wrap(`${topo}<p>O narrador não está aceitando novos jogadores agora. Peça ao narrador para abrir a mesa e toque em “Tentar de novo”.</p><button class="btn light" data-act="join-retry">Tentar de novo</button>`);
+    if (!store.order.length) return wrap(`${topo}<p>Você ainda não tem protagonistas neste aparelho. Crie um e depois abra o link do convite de novo.</p><button class="btn primary" data-act="new-char">${I.add} Criar protagonista</button>`);
+    const lista = store.order.map((id) => {
+      const c = store.chars[id], outra = salaDaFicha(id);
+      return `<button class="char-item join-opt" role="radio" aria-checked="${J.ficha === id}" data-act="join-ficha" data-id="${id}">
+        <span class="av">${esc((c.nome || '?').trim()[0] || '?')}</span>
+        <span><div class="nm">${esc(c.nome) || 'Sem nome'}</div><div class="cc">${esc(c.conceito) || '—'}${outra ? ` · já na mesa ${esc(store.salas[outra].nome)}` : ''}</div></span>${chkVis(J.ficha === id)}</button>`;
+    }).join('');
+    return wrap(`${topo}<p>Escolha o protagonista que vai jogar. O narrador verá a ficha e precisa aceitar a sua entrada.</p>
+      <div role="radiogroup" aria-label="Protagonista" class="join-list">${lista}</div>
+      <button class="btn primary block" data-act="join-pedir" ${J.ficha && !J.enviando ? '' : 'disabled'}>${J.enviando ? 'Enviando…' : 'Pedir para entrar'}</button>`);
+  }
+
+  // ---------- mesas: modo narrador ----------
+  const baseUrl = () => location.origin + location.pathname.replace(/index\.html$/, '');
+  const linkConvite = (id) => `${baseUrl()}#sala=${id}`;
+  const linkObs = (id) => `${baseUrl()}obs.html?sala=${id}`;
+  const linkApi = (id) => `https://firestore.googleapis.com/v1/projects/kd-ficha/databases/(default)/documents/salas/${id}/painel`;
+
+  function abrirNarrador() {
+    const N = ui.narr;
+    if (!ui.cloud) return;
+    N.salas = null;
+    getNuvem().then((n) => n.minhasSalas()).then((l) => {
+      N.salas = l.sort((a, b) => ((b.criadaEm && b.criadaEm.seconds) || 0) - ((a.criadaEm && a.criadaEm.seconds) || 0));
+      if (store.view === 'narrador') render();
+    }).catch(() => { N.salas = []; toast('Não foi possível carregar suas mesas.'); if (store.view === 'narrador') render(); });
+  }
+  function abrirSala(id) {
+    fecharSala();
+    const N = ui.narr;
+    Object.assign(N, { sala: id, salaDoc: undefined, membros: null, ver: null });
+    store.view = 'narrador';
+    getNuvem().then((n) => {
+      if (N.sala !== id) return;
+      N.unsub.push(n.ouvirSala(id, (s) => { if (N.sala !== id) return; N.salaDoc = s; if (store.view === 'narrador') render(); },
+        () => { N.salaDoc = null; render(); }));
+      N.unsub.push(n.ouvirMembros(id, (lista) => {
+        if (N.sala !== id) return;
+        const antes = N.membros;
+        if (antes) {
+          lista.filter((m) => m.status === 'pendente' && !antes.some((x) => x.id === m.id))
+            .forEach((m) => toast(`${m.nome || 'Um jogador'} pediu para entrar na mesa.`));
+        }
+        N.membros = lista.sort((a, b) => String((a.ficha && a.ficha.nome) || a.nome).localeCompare(String((b.ficha && b.ficha.nome) || b.nome)));
+        if (N.ver && !lista.some((m) => m.id === N.ver)) N.ver = null;
+        if (store.view === 'narrador') render();
+      }, () => toast('Sem acesso aos jogadores desta mesa.')));
+    }).catch(() => toast('Sem conexão com a nuvem.'));
+  }
+  function fecharSala() {
+    const N = ui.narr;
+    N.unsub.forEach((u) => { try { u(); } catch (e) { /* ok */ } });
+    Object.assign(N, { unsub: [], sala: null, salaDoc: null, membros: null, ver: null });
+  }
+
+  function cartaoResumo(r, acoes) {
+    const pct = r.vigorMax ? Math.round((clamp(r.vigor, 0, r.vigorMax) / r.vigorMax) * 100) : 0;
+    const stat = (lbl, v, cls = '') => `<span class="rs-stat ${cls}"><small>${lbl}</small><b>${v}</b></span>`;
+    return `<article class="resumo ${r.derrotado ? 'derrotado' : ''}">
+      <div class="cc-head"><span class="cc-av">${esc((r.nome || '?').trim()[0] || '?')}</span>
+        <span class="rs-who"><span class="rs-nm">${esc(r.nome)}</span><small>${esc(r.jogador)}</small></span>
+        <span class="cc-aura"><small>Aura</small><b>${r.aura}</b></span></div>
+      <div class="cc-body">
+        <span class="cc-cc">${esc(r.conceito) || '—'}${r.estilo ? ` · ${esc(r.estilo)}` : ''}</span>
+        <span class="cc-vigor" role="img" aria-label="Vigor ${r.vigor} de ${r.vigorMax}">
+          <span class="fill" style="width:${pct}%"></span>
+          <span class="txt"><small>Vigor</small><b>${r.vigor}/${r.vigorMax}</b></span>
+        </span>
+        <span class="rs-feri" aria-label="Ferimentos: ${r.feri.filter(Boolean).length} de ${r.feri.length}"><small>Ferimentos</small>${r.feri.map((m) => `<i class="${m ? 'on' : ''}"></i>`).join('')}${r.derrotado ? '<b>Derrotado</b>' : ''}</span>
+        <span class="rs-stats">${stat('Sinc.', r.sinc)}${stat('Nagen', `${r.nagen}/${r.canal}`, r.nagen > r.canal ? 'warn' : '')}${stat('Ações', `${r.acoes}/${r.acoesMax}`)}${stat('Tensão', r.tensao)}${stat('Karma', r.karma)}</span>
+        <span class="rs-lim">Defesa <b>${r.defesa}</b> · Proteção <b>${r.protecao}</b> · Canalização <b>${r.canal}</b></span>
+        ${acoes || ''}
+      </div>
+    </article>`;
+  }
+
+  function narradorPage() {
+    const N = ui.narr;
+    const head = (title, back) => `<div class="home-head narr-head"><button class="icon-btn" data-act="${back}" aria-label="Voltar">${I.back}</button><h1 class="h1">${title}</h1></div>`;
+    if (!ui.cloud) {
+      return `<section class="home narr">${head('Modo narrador', 'home')}
+        <div class="narr-box"><p>Crie uma mesa, compartilhe o link com os jogadores e acompanhe as fichas deles em tempo real, inclusive em um overlay para o OBS. É preciso entrar com Google.</p>
+        ${ui.cloudState === 'checking' ? '<p class="hint">Conectando…</p>' : `<button class="btn primary" data-act="login">${I.cloud} Entrar com Google</button>`}</div></section>`;
+    }
+    if (!N.sala) {
+      const lista = N.salas == null ? '<p class="hint">Carregando suas mesas…</p>'
+        : N.salas.length ? `<div class="stack">${N.salas.map((s) => `<button class="mesa-row mesa-pick" data-act="narr-abrir" data-id="${esc(s.id)}">
+            <span class="mr-info"><b>${esc(s.nome)}</b><small>${s.aberta ? 'Aceitando novos jogadores' : 'Fechada para novos jogadores'}</small></span><span class="chev-r">${I.back}</span></button>`).join('')}</div>`
+          : '<p class="hint">Você ainda não criou nenhuma mesa.</p>';
+      return `<section class="home narr">${head('Modo narrador', 'home')}
+        <div class="narr-box"><label class="field"><span>Nova mesa</span>
+          <span class="narr-new"><input class="input" id="narr-nome" maxlength="80" placeholder="Nome da mesa (ex.: Campanha de sexta)" autocomplete="off"><button class="btn primary" data-act="narr-criar">${I.add} Criar</button></span></label></div>
+        <h2 class="h-section narr-sub">Suas mesas</h2>${lista}</section>`;
+    }
+    const s = N.salaDoc;
+    if (s === undefined || (s && N.membros == null)) return `<section class="home narr">${head('Mesa', 'narr-voltar')}<p class="hint">Carregando a mesa…</p></section>`;
+    if (s === null) return `<section class="home narr">${head('Mesa', 'narr-voltar')}<div class="narr-box"><p>Esta mesa não existe mais.</p></div></section>`;
+
+    if (N.ver) {
+      const m = N.membros.find((x) => x.id === N.ver);
+      if (m) return fichaDoJogador(m);
+    }
+    const pend = N.membros.filter((m) => m.status === 'pendente');
+    const aceitos = N.membros.filter((m) => m.status === 'aceito');
+    const conv = linkConvite(s.id), obs = linkObs(s.id), api = linkApi(s.id);
+    const linkRow = (lbl, icon, url, extra = '') => `<div class="link-row"><span class="lr-lbl">${icon}${lbl}</span>
+      <span class="lr-ctl"><input class="input" readonly value="${esc(url)}" aria-label="${esc(lbl)}" data-select-all><button class="btn sm" data-act="copiar" data-v="${esc(url)}">${I.copy} Copiar</button>${extra}</span></div>`;
+    const fichaNome = (m) => esc((m.ficha && m.ficha.nome) || 'Sem nome');
+    return `<section class="home narr">
+      ${head(esc(s.nome), 'narr-voltar')}
+      <div class="narr-box narr-links">
+        ${linkRow('Convite para os jogadores', I.link, conv, 'share' in navigator ? `<button class="btn sm light" data-act="compartilhar" data-v="${esc(conv)}" aria-label="Compartilhar convite">${I.share}</button>` : '')}
+        ${linkRow('Overlay para o OBS (fonte de navegador)', I.tv, obs, `<a class="btn sm light" href="${esc(obs)}" target="_blank" rel="noopener">Abrir</a>`)}
+        <details class="api-help"><summary>Opções do overlay e API (JSON)</summary>
+          <p>Adicione no OBS uma <b>Fonte de navegador</b> com o link acima (fundo transparente). Parâmetros opcionais, somados ao link com <code>&amp;</code>:</p>
+          <ul>
+            <li><code>layout=linha</code> (padrão), <code>coluna</code> ou <code>compacto</code></li>
+            <li><code>jogador=&lt;uid&gt;</code> mostra só um protagonista (um link por jogador: veja abaixo)</li>
+            <li><code>tema=claro</code> ou <code>escuro</code> (padrão) · <code>escala=1.5</code> · <code>fundo=1</code> (fundo sólido para testar)</li>
+            <li><code>ocultar=limiares,stats,ferimentos,conceito,jogador</code> esconde partes do cartão</li>
+          </ul>
+          <p>API (JSON, só leitura, atualizada em tempo real pelos jogadores):</p>
+          ${linkRow('Resumos da mesa', I.file, api)}
+          <p class="hint">Cada documento tem nome, jogador, aura, vigor, vigorMax, feri, derrotado, sinc, nagen, canal, acoes, acoesMax, tensao, karma, defesa e protecao. Para personalizar o visual, use o campo “CSS personalizado” da fonte de navegador (classes <code>.kd-card</code>, <code>.kd-vigor</code>, <code>.kd-feri</code>…).</p>
+        </details>
+        <label class="toggle">${chk(s.aberta, 'narr-aberta', '', 'Aceitando novos jogadores')} Aceitando novos jogadores</label>
+      </div>
+
+      ${pend.length ? `<h2 class="h-section narr-sub">Pedidos para entrar <span class="meta">${pend.length}</span></h2>
+      <div class="stack">${pend.map((m) => `<div class="mesa-row pedido">
+        <span class="mr-info"><b>${esc(m.nome)}</b><small>com ${fichaNome(m)}${m.ficha && m.ficha.conceito ? ` · ${esc(m.ficha.conceito)}` : ''}</small></span>
+        <span class="mr-acts"><button class="btn light sm" data-act="narr-ver" data-id="${esc(m.id)}">${I.eye} Ficha</button><button class="btn ghost sm" data-act="narr-recusar" data-id="${esc(m.id)}">Recusar</button><button class="btn primary sm" data-act="narr-aceitar" data-id="${esc(m.id)}">${I.check} Aceitar</button></span>
+      </div>`).join('')}</div>` : ''}
+
+      <h2 class="h-section narr-sub">Jogadores <span class="meta">${aceitos.length}</span></h2>
+      ${aceitos.length ? `<div class="home-grid resumo-grid">${aceitos.map((m) => cartaoResumo(resumo(normalize(m.ficha || {}), m.nome),
+        `<span class="rs-acts"><button class="btn sm" data-act="narr-ver" data-id="${esc(m.id)}">${I.eye} Ver ficha</button><button class="btn light sm" data-act="copiar" data-v="${esc(`${obs}&jogador=${m.id}`)}" title="Copiar o link do overlay só deste jogador">${I.tv} OBS</button><button class="btn ghost sm" data-act="narr-remover" data-id="${esc(m.id)}">Remover</button></span>`)).join('')}</div>`
+        : `<p class="hint">Ninguém na mesa ainda. Envie o link do convite: cada jogador entra com Google, escolhe o protagonista e aparece em “Pedidos”.</p>`}
+
+      <div class="narr-foot"><button class="btn ghost sm" data-act="narr-apagar">${I.trash} Excluir mesa</button></div>
+    </section>`;
+  }
+
+  function fichaDoJogador(m) {
+    const c = normalize(m.ficha || {});
+    ensureFeri(c);
+    const D = derived(c);
+    c.estado.vigor = clamp(c.estado.vigor, 0, D.vigorMax);
+    ui.ro = true;
+    let html;
+    try { html = sheet(c, D); } finally { ui.ro = false; }
+    return `<div class="narr-ver">
+      <div class="narr-ver-bar"><button class="btn light sm" data-act="narr-fechar-ficha">${I.back} Voltar à mesa</button>
+        <span>Ficha de <b>${esc(m.nome)}</b>${m.status === 'pendente' ? ' (pedido pendente)' : ''} · atualiza em tempo real</span></div>
+      <div class="sheet-ro">${html}</div>
+    </div>`;
+  }
+
+  async function copiar(txt) {
+    try { await navigator.clipboard.writeText(txt); toast('Link copiado.'); }
+    catch (e) { toast('Não foi possível copiar. Selecione o link e copie manualmente.'); }
+  }
+
+  const isEdit = () => !ui.ro && store.mode === 'edit';
   const chk = (on, act, attrs = '', label = '') =>
     `<button class="chk" role="checkbox" aria-checked="${!!on}" data-act="${act}" ${attrs} aria-label="${esc(label)}">${I.check}</button>`;
   // Versão visual (não interativa) para usar dentro de outro botão.
@@ -709,6 +1018,7 @@
         ${onHome() ? '' : `<button class="menu-item" data-act="home">${I.home} Todos os protagonistas</button>`}
         <button class="menu-item" data-act="new-char">${I.add} Novo protagonista</button>
         <button class="menu-item" data-act="import-char">${I.up} Importar ficha (.json)</button>
+        <button class="menu-item" data-act="narrador">${I.users} Modo narrador (mesas)</button>
         ${onHome() ? '' : `
         <div class="menu-sep"></div>
         <button class="menu-item" data-act="dup-char">${I.copy} Duplicar esta ficha</button>
@@ -1239,6 +1549,9 @@
     if (!el) return;
     const act = el.dataset.act;
     if (act === 'overlay' && ev.target !== el) return; // clique dentro do modal
+    // Ficha de outro jogador (modo narrador): só abrir/fechar técnicas e textos.
+    if (el.closest('.sheet-ro') && act !== 'tec-toggle' && act !== 'more') return;
+    if (handleMesa(act, el)) return;
     const c = ch();
     const D = c ? derived(c) : null;
     const id = el.dataset.id;
@@ -1510,6 +1823,7 @@
           body: `<p style="margin:0">Excluir <b>${esc(c.nome) || 'esta ficha'}</b> deste aparelho? Exporte antes se quiser guardar uma cópia.</p>`,
           onOk: () => {
             if (ui.cloud) getNuvem().then((n) => n.apagar(c.id)).catch(() => {});
+            Object.keys(store.salas).filter((s) => store.salas[s].fichaId === c.id).forEach(sairDaSala);
             delete sent[c.id];
             delete store.chars[c.id];
             delete lastJ[c.id];
@@ -1524,12 +1838,129 @@
     }
   });
 
+  // Ações das mesas (jogador e narrador). Retorna true se tratou o clique.
+  function handleMesa(act, el) {
+    const id = el.dataset.id;
+    const N = ui.narr;
+    const nuvemOu = (fn, erro) => getNuvem().then(fn).catch((e) => { toast(erro); throw e; });
+    switch (act) {
+      case 'narrador':
+        closeModal();
+        store.view = 'narrador';
+        fecharSala();
+        abrirNarrador();
+        if (!ui.cloud && navigator.onLine) getNuvem().catch(() => {});
+        render(); window.scrollTo({ top: 0 });
+        return true;
+      case 'narr-criar': {
+        const inp = $('#narr-nome');
+        const nome = (inp && inp.value.trim()) || 'Mesa sem nome';
+        el.disabled = true;
+        nuvemOu((n) => n.criarSala(nome), 'Não foi possível criar a mesa agora.')
+          .then((sid) => { toast('Mesa criada. Envie o link do convite aos jogadores.'); abrirSala(sid); render(); })
+          .catch(() => { el.disabled = false; });
+        return true;
+      }
+      case 'narr-abrir': closeModal(); abrirSala(id); render(); window.scrollTo({ top: 0 }); return true;
+      case 'narr-voltar': fecharSala(); abrirNarrador(); render(); return true;
+      case 'narr-ver': N.ver = id; render(); window.scrollTo({ top: 0 }); return true;
+      case 'narr-fechar-ficha': N.ver = null; render(); window.scrollTo({ top: 0 }); return true;
+      case 'narr-aberta': {
+        const s = N.salaDoc;
+        if (s) nuvemOu((n) => n.atualizarSala(s.id, { aberta: !s.aberta }), 'Não foi possível alterar a mesa.').catch(() => {});
+        return true;
+      }
+      case 'narr-aceitar': {
+        const m = (N.membros || []).find((x) => x.id === id), sid = N.sala;
+        if (!m) return true;
+        nuvemOu(async (n) => {
+          await n.definirStatus(sid, id, 'aceito');
+          await n.escreverPainel(sid, id, resumo(normalize(m.ficha || {}), m.nome)).catch(() => {});
+        }, 'Não foi possível aceitar agora.').then(() => toast(`${m.nome || 'Jogador'} entrou na mesa.`)).catch(() => {});
+        return true;
+      }
+      case 'narr-recusar': case 'narr-remover': {
+        const m = (N.membros || []).find((x) => x.id === id), sid = N.sala;
+        if (!m) return true;
+        const run = () => nuvemOu((n) => n.removerMembro(sid, id), 'Não foi possível remover agora.')
+          .then(() => toast(act === 'narr-recusar' ? 'Pedido recusado.' : `${m.nome || 'Jogador'} saiu da mesa.`)).catch(() => {});
+        if (act === 'narr-recusar') run();
+        else {
+          openModal({
+            type: 'confirm', title: 'Remover jogador', ok: 'Remover',
+            body: `<p style="margin:0">Remover <b>${esc(m.nome)}</b> (${esc((m.ficha && m.ficha.nome) || 'Sem nome')}) da mesa? A ficha sai do seu painel e do overlay, mas continua no aparelho de quem joga.</p>`,
+            onOk: run,
+          });
+        }
+        return true;
+      }
+      case 'narr-apagar': {
+        const s = N.salaDoc;
+        if (!s) return true;
+        openModal({
+          type: 'confirm', title: 'Excluir mesa', ok: 'Excluir',
+          body: `<p style="margin:0">Excluir a mesa <b>${esc(s.nome)}</b>? Os jogadores saem dela, o link do convite e o overlay param de funcionar. As fichas continuam nos aparelhos dos jogadores.</p>`,
+          onOk: () => {
+            nuvemOu((n) => n.apagarSala(s.id), 'Não foi possível excluir a mesa agora.')
+              .then(() => { toast('Mesa excluída.'); fecharSala(); abrirNarrador(); render(); }).catch(() => {});
+          },
+        });
+        return true;
+      }
+      case 'copiar': copiar(el.dataset.v); return true;
+      case 'compartilhar':
+        navigator.share({ title: 'Convite para mesa de Karyu Densetsu', url: el.dataset.v }).catch(() => {});
+        return true;
+
+      // jogador
+      case 'join-retry': carregarConvite(); render(); return true;
+      case 'join-ficha': if (ui.join) { ui.join.ficha = id; render(); } return true;
+      case 'join-pedir': {
+        const J = ui.join;
+        if (!J || !J.ficha || !J.sala || J.enviando) return true;
+        const c = store.chars[J.ficha], s = J.sala;
+        if (!c) return true;
+        J.enviando = true; render();
+        getNuvem().then((n) => n.pedirEntrada(s.id, c).then((status) => {
+          store.salas[s.id] = { nome: s.nome, mestre: s.mestreNome || '', fichaId: c.id, status };
+          salaSent[s.id] = JSON.stringify(c) + status;
+          ouvirSalaJogador(n, s.id);
+          store.view = 'home';
+          save(true); render(); window.scrollTo({ top: 0 });
+          toast(status === 'aceito' ? `Protagonista trocado na mesa ${s.nome}.` : 'Pedido enviado. Aguarde o narrador aceitar.');
+        })).catch(() => {
+          J.enviando = false; render();
+          toast('Não foi possível entrar na mesa. Ela pode ter sido fechada; tente de novo.');
+        });
+        return true;
+      }
+      case 'sala-sair': {
+        const s = store.salas[id];
+        if (!s) return true;
+        openModal({
+          type: 'confirm', title: 'Sair da mesa', ok: 'Sair',
+          body: `<p style="margin:0">Sair da mesa <b>${esc(s.nome)}</b>? O narrador deixa de ver sua ficha. Ela continua neste aparelho.</p>`,
+          onOk: () => sairDaSala(id),
+        });
+        return true;
+      }
+      default: return false;
+    }
+  }
+  function sairDaSala(id) {
+    pararSalaJogador(id);
+    delete store.salas[id];
+    delete salaSent[id];
+    if (ui.cloud) getNuvem().then((n) => n.sairSala(id)).catch(() => {});
+  }
+
   function bestAttrFor(c) {
     return Object.entries(c.atributos).sort((a, b) => b[1] - a[1])[0][0];
   }
 
   document.addEventListener('input', (ev) => {
     const el = ev.target;
+    if (el.closest && el.closest('.sheet-ro')) return;
     if (el.dataset.bind) { bindSet(el.dataset.bind, el.value); save(); return; }
     const a = el.dataset.actInput;
     if (a === 'r-alvo') { ui.roll.alvo = el.value.replace(/[^\d-]/g, ''); updateRollPreview(); }
@@ -1568,6 +1999,8 @@
   document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape' && ui.modal) closeModal();
   });
+  // Campos de link do narrador: tocar seleciona tudo.
+  document.addEventListener('focusin', (ev) => { if (ev.target.matches && ev.target.matches('[data-select-all]')) ev.target.select(); });
 
   // ---------- importar / exportar ----------
   const fileBase = (c) => (c.nome || 'ficha').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ficha';
@@ -1634,7 +2067,15 @@
         await n.ready;
         n.onUser((u) => {
           const was = !!ui.cloud;
-          ui.cloud = u ? { nome: u.displayName || u.email || 'conta Google' } : null;
+          ui.cloud = u ? { nome: u.displayName || u.email || 'conta Google', uid: u.uid } : null;
+          if (u && !was) {
+            iniciarSalasJogador();
+            if (store.view === 'narrador') abrirNarrador();
+          }
+          if (!u) {
+            Object.keys(salaSubs).forEach(pararSalaJogador);
+            fecharSala();
+          }
           let marcado = false;
           try { marcado = !!localStorage.getItem(NV_KEY); } catch (e) { /* ok */ }
           if (u) {
@@ -1645,7 +2086,8 @@
             setCloud('lost');
             toast('Você não está conectado à nuvem: as alterações ficam só neste aparelho. Toque em “Desconectado” no topo para entrar.');
           } else setCloud('off');
-          if (ui.modal && ui.modal.type === 'menu') renderModal();
+          if (store.view === 'narrador' || store.view === 'entrar') render();
+          else if (ui.modal && ui.modal.type === 'menu') renderModal();
         });
         return n;
       }).catch((e) => {
@@ -1745,6 +2187,10 @@
     } catch (e) { toast('Não foi possível manter a tela ligada neste navegador.'); }
     renderModal();
   }
+  // App indo para segundo plano (ou fechando): envia já o que estava esperando para a mesa.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && salaTimer) { clearTimeout(salaTimer); salaTimer = null; enviarSalas(); }
+  });
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible' && ui.wake && ui.wake.released) {
       try { ui.wake = await navigator.wakeLock.request('screen'); } catch (e) { ui.wake = null; }
@@ -1754,7 +2200,10 @@
   // ---------- início ----------
   store = load();
   store.order.forEach((id) => { lastJ[id] = bodyJ(store.chars[id]); });
+  lerConvite();
   render();
+  // Link de convite aberto com o app já carregado.
+  window.addEventListener('hashchange', () => { if (lerConvite()) { closeModal(); render(); } });
   // Prepara os dados 3D logo após abrir o app, para a primeira rolagem já sair na hora.
   setTimeout(() => { if (want3d()) getDiceBox().catch(() => {}); }, 800);
   // Quem já entrou neste aparelho volta conectado (e sincroniza) ao abrir o app.

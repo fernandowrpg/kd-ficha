@@ -1,0 +1,100 @@
+/* Overlay da mesa para o OBS. Fundo transparente; cores do style guide (Fiery/Steel).
+   Para personalizar, use o "CSS personalizado" da fonte de navegador do OBS, por exemplo:
+   .kd-card { --kd-card-bg: rgba(18,18,18,.8); }  .kd-stats { display: none; } */
+@font-face { font-family: 'KD Dice'; src: url('../fonts/ChakraPetch-Bold-latin.woff2') format('woff2'); font-weight: 700; font-display: swap; }
+:root {
+  --kd-escala: 1;
+  --kd-red: #A03422; --kd-red-hi: #CD3A29; --kd-red-lo: #6E2920; --kd-peach: #EBAC86; --kd-orange: #DB6134;
+  --kd-card-bg: rgba(18, 18, 18, .92);
+  --kd-head-bg: #050505;
+  --kd-text: #F6F6F6;
+  --kd-text-2: #B0B0B0;
+  --kd-track: #3D3D3D;
+  --kd-box: #FFFFFF; --kd-box-text: #121212;
+  --kd-line: #2C2C2C;
+  --kd-display: 'Permanent Marker', 'Marker Felt', cursive;
+  --kd-body: 'Chakra Petch', system-ui, sans-serif;
+}
+:root[data-tema="claro"] {
+  --kd-card-bg: rgba(255, 255, 255, .95);
+  --kd-head-bg: #121212;
+  --kd-text: #121212;
+  --kd-text-2: #4F4F4F;
+  --kd-track: #D1D1D1;
+  --kd-line: #E7E7E7;
+}
+html, body { margin: 0; background: transparent; }
+html.kd-fundo body { background: #1F6B3A; } /* verde de teste, para conferir o recorte */
+body { font-family: var(--kd-body); color: var(--kd-text); overflow: hidden; -webkit-font-smoothing: antialiased; }
+
+.kd-overlay {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; padding: 16px;
+  zoom: var(--kd-escala);
+}
+:root[data-layout="coluna"] .kd-overlay { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; }
+
+.kd-aviso { font: 700 16px/1.3 var(--kd-body); color: #fff; background: rgba(0,0,0,.75); padding: 10px 14px; border-left: 4px solid var(--kd-orange); border-radius: 2px; }
+
+.kd-card {
+  width: 290px; background: var(--kd-card-bg); border-radius: 2px; overflow: hidden;
+  box-shadow: 0 6px 24px rgba(0,0,0,.45); transition: opacity .3s ease, filter .3s ease;
+  animation: kd-entra .35s ease both;
+}
+@keyframes kd-entra { from { opacity: 0; transform: translateY(12px); } }
+.kd-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--kd-head-bg); border-bottom: 3px solid var(--kd-red); color: #fff; }
+.kd-av { flex: none; width: 38px; height: 38px; display: grid; place-items: center; background: var(--kd-box); color: var(--kd-box-text); font: 22px/1 var(--kd-display); border-radius: 2px; }
+.kd-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.kd-nome { font: 20px/22px var(--kd-display); font-variant: small-caps; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kd-jogador { font-size: 11px; line-height: 14px; color: #B0B0B0; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kd-aura { flex: none; display: flex; flex-direction: column; align-items: center; min-width: 38px; padding: 2px 6px; background: var(--kd-red); border-radius: 2px; }
+.kd-aura small { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: #F3CDB5; }
+.kd-aura b { font: 700 18px/20px 'KD Dice', var(--kd-body); }
+
+.kd-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+.kd-conceito { font-size: 11px; line-height: 14px; color: var(--kd-text-2); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kd-conceito:empty { display: none; }
+
+.kd-vigor { position: relative; height: 24px; background: var(--kd-track); border-radius: 2px; overflow: hidden; }
+.kd-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--kd-red), var(--kd-red-hi)); transition: width .5s cubic-bezier(.2,.8,.2,1); }
+.kd-txt { position: relative; height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.kd-txt small { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.kd-txt b { font: 700 15px/1 'KD Dice', var(--kd-body); }
+
+.kd-feri { display: flex; align-items: center; gap: 4px; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--kd-text-2); }
+.kd-feri small { margin-right: 4px; }
+.kd-caixas { display: inline-flex; gap: 4px; }
+.kd-caixas i { width: 14px; height: 14px; border: 2px solid var(--kd-text-2); border-radius: 2px; }
+.kd-caixas i.on { background: var(--kd-red-hi); border-color: var(--kd-red-hi); }
+.kd-derrotado { display: none; margin-left: auto; color: var(--kd-orange); font-size: 11px; }
+.kd-card.derrotado .kd-derrotado { display: inline; }
+.kd-card.derrotado { filter: grayscale(.75); opacity: .8; }
+
+.kd-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.kd-stat { display: flex; flex-direction: column; align-items: center; padding: 3px 0; background: rgba(127,127,127,.14); border-radius: 2px; }
+.kd-stat small { font-size: 9px; text-transform: uppercase; letter-spacing: .4px; color: var(--kd-text-2); }
+.kd-stat b { font: 700 15px/18px 'KD Dice', var(--kd-body); }
+.kd-stat.warn { background: var(--kd-red); color: #fff; }
+.kd-stat.warn small { color: #F3CDB5; }
+
+.kd-limiares { display: flex; justify-content: space-between; font-size: 11px; color: var(--kd-text-2); border-top: 1px solid var(--kd-line); padding-top: 5px; }
+.kd-limiares b { color: var(--kd-text); font-family: 'KD Dice', var(--kd-body); }
+
+/* Perdeu ou recuperou Vigor */
+.kd-card.kd-dano { animation: kd-dano .6s ease; }
+.kd-card.kd-cura { animation: kd-cura .6s ease; }
+@keyframes kd-dano { 0%, 100% { transform: none; } 20% { transform: translateX(-5px); box-shadow: 0 0 0 3px var(--kd-red-hi), 0 6px 24px rgba(0,0,0,.45); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } }
+@keyframes kd-cura { 50% { box-shadow: 0 0 0 3px var(--kd-peach), 0 6px 24px rgba(0,0,0,.45); } }
+
+/* Layout compacto: só nome, vigor e ferimentos */
+:root[data-layout="compacto"] .kd-card { width: 220px; }
+:root[data-layout="compacto"] .kd-conceito,
+:root[data-layout="compacto"] .kd-stats,
+:root[data-layout="compacto"] .kd-limiares,
+:root[data-layout="compacto"] .kd-jogador { display: none; }
+:root[data-layout="compacto"] .kd-av { width: 30px; height: 30px; font-size: 18px; }
+
+/* ocultar=... */
+.kd-sem-limiares .kd-limiares, .kd-sem-stats .kd-stats, .kd-sem-ferimentos .kd-feri,
+.kd-sem-conceito .kd-conceito, .kd-sem-jogador .kd-jogador { display: none; }
+
+@media (prefers-reduced-motion: reduce) { .kd-card, .kd-fill { animation: none !important; transition: none !important; } }
