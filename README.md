@@ -4,6 +4,7 @@ Construtor de fichas de **A Lenda do Dragão de Fogo: Karyu Densetsu** para mont
 
 ## Funcionalidades
 
+- **Início:** bloco “+ Protagonista” para criar uma ficha e um bloco para cada protagonista já criado (nome, conceito, Aura, estilo e Vigor).
 - **Modo Editar:** nome, conceito, Aura, atributos (18 pontos), estilo de luta (6 pontos, com estilos de exemplo do livro), ocupações e especializações (6 pontos), trunfos, caminho, laços e técnicas. Um painel “Criação” mostra os pontos gastos, e os trunfos que mudam limites (Perito, Prodígio, Ciborgue, Incansável etc.) são aplicados automaticamente.
 - **Cálculo automático:** Barra de Vigor, Limiar de Canalização, Limiar de Defesa, Limiar de Proteção, caixas de ferimento e sincronização por cena.
 - **Catálogos:** 115 técnicas (custo, requisito, tipo e afinidade, com busca e filtros), trunfos, caminhos com seus eventos e upgrades.
@@ -22,6 +23,7 @@ Construtor de fichas de **A Lenda do Dragão de Fogo: Karyu Densetsu** para mont
 - **Dados 3D:** animação com física e 3 skins nas cores do style guide (Karyu, Aço, Brasa). Pode ser desligada.
 - **Mesa:** nova rodada, nova cena, fim de sessão (cálculo de karma), Tensão, Karma e poder das emoções (Esperança, Confiança…).
 - **Várias fichas** no mesmo aparelho, com exportar/importar `.json` e exportar em **PDF** (A4, pronto para imprimir).
+- **Login com Google (opcional):** salva as fichas na nuvem (Firebase/Firestore) e sincroniza entre aparelhos; ao terminar uma edição (voltar para “Jogar”, ir ao início ou trocar de ficha) a ficha é enviada na hora. Sem login, tudo continua só no aparelho. Detalhes em `docs/login-firebase.md`.
 - **Som dos dados** (mesa de madeira), com opção de desligar.
 - **PWA:** dá para instalar na tela inicial, funciona offline e pode manter a tela ligada durante o jogo.
 
@@ -54,6 +56,7 @@ js/app.js               estado, regras, render, rolador, mesa
 js/data.js              atributos, ocupações, estilos, caminhos, trunfos, upgrades
 js/tecnicas.js          catálogo de técnicas
 js/pdf.js               exportador da ficha em PDF (carregado sob demanda)
+js/nuvem.js             login com Google e sincronização no Firestore (carregado sob demanda)
 vendor/                 dice-box-threejs (UMD, inclui three.js e cannon-es) e jsPDF (MIT)
 fonts/                  Chakra Petch Bold (números dos dados 3D, OFL)
 sw.js, manifest.webmanifest, icons/   PWA

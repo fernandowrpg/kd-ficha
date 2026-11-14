@@ -92,7 +92,7 @@ button:disabled { cursor: default; }
   background: var(--neutral-bg-dark);
   color: var(--steel-0);
 }
-.appbar .brand { font-family: var(--font-display); font-variant: small-caps; font-size: 18px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.appbar .brand { text-align: left; color: inherit; padding: 0; font-family: var(--font-display); font-variant: small-caps; font-size: 18px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .appbar .brand span { color: var(--fiery-500); }
 .icon-btn {
   width: 44px; height: 44px; display: inline-grid; place-items: center; border-radius: var(--radius);
@@ -465,6 +465,8 @@ body.mode-edit .play-only { display: none !important; }
 .menu-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; text-align: left; font-weight: 700; font-size: 15px; }
 .menu-item:hover { background: var(--steel-50); }
 .menu-item svg { width: 20px; height: 20px; color: var(--primary-text); }
+.menu-note { display: flex; align-items: center; gap: 12px; padding: 10px 16px; font-size: 14px; color: var(--text-secondary); }
+.menu-note svg { width: 20px; height: 20px; flex: none; color: var(--primary-text); }
 .menu-sep { height: 1px; background: var(--steel-100); margin: 4px 0; }
 
 /* Toast */
@@ -479,3 +481,34 @@ body.mode-edit .play-only { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Início (protagonistas) ---------- */
+.home { max-width: 1080px; margin: 0 auto; padding: 20px 16px; }
+.home-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.home-head .h1 { color: var(--text-primary); }
+.home-head .meta { font-size: 14px; color: var(--text-secondary); }
+.home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+@media (max-width: 479px) { .home-grid { grid-template-columns: 1fr 1fr; gap: 10px; } }
+.new-card, .char-card { min-height: 190px; border-radius: var(--radius); text-align: left; display: flex; flex-direction: column; overflow: hidden; }
+.new-card {
+  align-items: center; justify-content: center; gap: 6px; text-align: center;
+  border: 2px dashed var(--primary-border); background: var(--fiery-50); color: var(--primary-text);
+}
+.new-card:hover { background: var(--fiery-100); }
+.new-card .plus { width: 56px; height: 56px; border-radius: 50%; background: var(--primary-bg-dark); color: var(--steel-0); display: grid; place-items: center; }
+.new-card .plus svg { width: 30px; height: 30px; stroke-width: 2.5; }
+.new-card .lbl { font-family: var(--font-display); font-variant: small-caps; font-size: 24px; line-height: 26px; }
+.new-card small { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; }
+.char-card { background: var(--neutral-bg-base); box-shadow: 0 1px 0 var(--steel-300), 0 0 0 1px var(--steel-200); transition: transform .12s ease, box-shadow .12s ease; }
+.char-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,.12), 0 0 0 1px var(--primary-divider); }
+.cc-head { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--neutral-bg-dark); border-bottom: 3px solid var(--primary-bg-dark); }
+.cc-av { width: 44px; height: 44px; border-radius: var(--radius); background: var(--steel-0); color: var(--steel-950); display: grid; place-items: center; font-family: var(--font-display); font-size: 24px; }
+.cc-aura { display: flex; flex-direction: column; align-items: center; min-width: 40px; padding: 2px 6px; background: var(--primary-bg-dark); color: var(--steel-0); border-radius: var(--radius); }
+.cc-aura small { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: var(--fiery-200); }
+.cc-aura b { font-size: 18px; line-height: 20px; }
+.cc-body { display: flex; flex-direction: column; gap: 4px; padding: 12px; flex: 1; min-width: 0; }
+.cc-nm { font-family: var(--font-display); font-variant: small-caps; font-size: 20px; line-height: 22px; overflow-wrap: anywhere; }
+.cc-cc { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; overflow-wrap: anywhere; }
+.cc-meta { margin-top: auto; padding-top: 8px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; font-size: 12px; font-weight: 700; color: var(--primary-text); }
+.home-hint { margin-top: 16px; }
+.home-page { padding-bottom: 24px; }
