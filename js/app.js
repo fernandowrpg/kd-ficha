@@ -43,6 +43,10 @@
     arrowUp: svg('<path d="M12 19V5M6 11l6-6 6 6"/>'),
     arrowDown: svg('<path d="M12 5v14M6 13l6 6 6-6"/>'),
     star: svg('<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>'),
+    file: svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'),
+    cloud: svg('<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1-.5 9.5z"/>'),
+    logout: svg('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/>'),
+    home: svg('<path d="M4 11l8-7 8 7M6 9.5V20h12V9.5"/>'),
     table: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   };
 
@@ -78,38 +82,6 @@
     return { id: uid(), nome: t ? t.nome : name, req: t ? t.req : '', desc: t ? t.desc : '' };
   }
 
-  function sampleChar() {
-    const c = blankChar();
-    c.nome = 'Sayaka Matsuoka';
-    c.conceito = 'Delinquente violenta';
-    c.atributos = { FOR: 5, RAZ: 1, AGI: 4, INS: 3, VON: 3, PRE: 2 };
-    c.estilo = { nome: 'Street Fighting', agarrao: 0, projetil: 0, golpe: 3, bloqueio: 2, combo: 1, esquiva: 0 };
-    c.ocupacoes.artista = { n: 3, esp: 'Música, Teatro' };
-    c.ocupacoes.piloto = { n: 1, esp: '' };
-    c.trunfos = [trunfoFromCatalog('Volta por Cima'), trunfoFromCatalog('Incansável')];
-    const cam = KD.caminhos.find((x) => x.nome === 'Independência');
-    c.caminho = { nome: cam.nome, eventos: cam.eventos.map((t) => ({ t, m: false })), rev: cam.rev, revM: false };
-    c.lacos = [
-      { id: uid(), t: 'Moto Tolwyn Taurus S1000 customizada', m: false },
-      { id: uid(), t: 'Irmã mais nova', m: false },
-      { id: uid(), t: 'RPGs de mesa', m: false },
-    ];
-    c.tecnicas = [
-      tecFromCatalog('Aura de Batalha'),
-      tecFromCatalog('Bloqueio Agressivo'),
-      tecFromCatalog('Abre Alas'),
-      tecFromCatalog('Dragão Nascente'),
-      tecFromCatalog('Estrela Cadente', {
-        ougi: true,
-        sinc: 'Some sua Aura no dano.',
-        ougiTxt: 'Você pode usar essa técnica como uma ação extra se acertou o oponente com Dragão Nascente primeiro.',
-      }),
-      tecFromCatalog('Palma Seca'),
-    ];
-    c.notas = 'Ficha de exemplo — toque em "Editar" para mudar tudo, ou crie uma nova ficha pelo menu.';
-    return normalize(c);
-  }
-
   // Garante todos os campos (fichas antigas ou importadas).
   function normalize(c) {
     const b = blankChar();
@@ -137,31 +109,45 @@
       const raw = localStorage.getItem(LS_KEY);
       if (raw) {
         const s = JSON.parse(raw);
-        if (s && s.chars && s.order && s.order.length) {
+        if (s && s.chars && Array.isArray(s.order)) {
           Object.keys(s.chars).forEach((k) => { s.chars[k] = normalize(s.chars[k]); });
-          if (!s.chars[s.current]) s.current = s.order[0];
+          s.order = s.order.filter((id) => s.chars[id]);
+          if (!s.chars[s.current]) s.current = null;
           s.mode = s.mode === 'edit' ? 'edit' : 'play';
+          s.view = 'home'; // o app sempre abre na lista de protagonistas
           s.settings = { dice3d: true, diceSkin: 'karyu', sound: true, ...(s.settings || {}) };
           return s;
         }
       }
     } catch (e) { /* armazenamento indisponível */ }
-    const c = sampleChar();
-    return { chars: { [c.id]: c }, order: [c.id], current: c.id, mode: 'play', settings: { dice3d: true, diceSkin: 'karyu', sound: true } };
+    return { chars: {}, order: [], current: null, view: 'home', mode: 'play', settings: { dice3d: true, diceSkin: 'karyu', sound: true } };
   }
   let saveTimer = null;
   function save(now) {
     clearTimeout(saveTimer);
+    markChanged(store.chars[store.current]);
     const run = () => {
       try { localStorage.setItem(LS_KEY, JSON.stringify(store)); }
       catch (e) { toast('Não foi possível salvar neste navegador. Exporte a ficha pelo menu.'); }
+      schedulePush();
     };
     if (now) run(); else saveTimer = setTimeout(run, 250);
   }
   const ch = () => store.chars[store.current];
+  // "upd" decide qual cópia vale na sincronização; só muda quando a ficha mudou.
+  const lastJ = {};
+  const bodyJ = (c) => { const { upd, ...rest } = c; return JSON.stringify(rest); };
+  function markChanged(c) {
+    if (!c) return false;
+    const j = bodyJ(c);
+    if (lastJ[c.id] === j) return false;
+    if (lastJ[c.id] !== undefined || !c.upd) c.upd = Date.now();
+    lastJ[c.id] = j;
+    return true;
+  }
 
   // estado efêmero da interface
-  const ui = { open: {}, more: {}, modal: null, roll: null, pendingD10: 0, wake: null, catQuery: '', catTipo: null, catElem: null };
+  const ui = { cloud: null, open: {}, more: {}, modal: null, roll: null, pendingD10: 0, wake: null, catQuery: '', catTipo: null, catElem: null };
 
   // ---------- regras derivadas ----------
   function fx(c) {
@@ -243,7 +229,14 @@
   const app = $('#app');
   const modalRoot = $('#modal-root');
 
+  const onHome = () => store.view === 'home' || !ch();
   function render() {
+    if (onHome()) {
+      document.body.classList.remove('mode-edit');
+      app.innerHTML = appbar() + `<main class="page home-page">${home()}</main>`;
+      renderModal();
+      return;
+    }
     const c = ch();
     ensureFeri(c);
     const D = derived(c);
@@ -270,14 +263,47 @@
 
   function appbar() {
     const edit = store.mode === 'edit';
+    const brand = `<button class="brand" data-act="home" aria-label="Início: protagonistas">Karyu <span>Densetsu</span></button>`;
+    if (onHome()) {
+      return `<header class="appbar">
+      <button class="icon-btn" data-act="open-menu" aria-label="Menu">${I.menu}</button>${brand}
+    </header>`;
+    }
     return `<header class="appbar">
       <button class="icon-btn" data-act="open-menu" aria-label="Fichas e opções">${I.menu}</button>
-      <div class="brand">Karyu <span>Densetsu</span></div>
+      ${brand}
       <div class="seg" role="group" aria-label="Modo">
         <button data-act="mode" data-v="play" aria-pressed="${!edit}">Jogar</button>
         <button data-act="mode" data-v="edit" aria-pressed="${edit}">Editar</button>
       </div>
     </header>`;
+  }
+
+  // Início: bloco "+ Protagonista" e um bloco para cada ficha criada.
+  function home() {
+    const cards = store.order.map((id) => {
+      const c = store.chars[id];
+      const D = derived(c);
+      const vig = c.estado.vigor == null ? D.vigorMax : c.estado.vigor;
+      return `<button class="char-card" data-act="pick-char" data-id="${id}" aria-label="Abrir ${esc(c.nome) || 'ficha sem nome'}">
+        <span class="cc-head"><span class="cc-av">${esc((c.nome || '?').trim()[0] || '?')}</span>
+          <span class="cc-aura"><small>Aura</small><b>${c.aura}</b></span></span>
+        <span class="cc-body">
+          <span class="cc-nm">${esc(c.nome) || 'Sem nome'}</span>
+          <span class="cc-cc">${esc(c.conceito) || '—'}</span>
+          <span class="cc-meta"><span>${esc(c.estilo.nome) || 'Sem estilo'}</span><span>Vigor ${vig}/${D.vigorMax}</span></span>
+        </span>
+      </button>`;
+    }).join('');
+    const n = store.order.length;
+    return `<section class="home">
+      <div class="home-head"><h1 class="h1">Protagonistas</h1>${n ? `<span class="meta">${n} ficha${n === 1 ? '' : 's'}</span>` : ''}</div>
+      <div class="home-grid">
+        <button class="new-card" data-act="new-char"><span class="plus">${I.add}</span><span class="lbl">Protagonista</span><small>Criar nova ficha</small></button>
+        ${cards}
+      </div>
+      ${n ? '' : `<p class="hint home-hint">Ainda não há fichas neste aparelho. Crie um protagonista${ui.cloud ? '' : ', importe um .json pelo menu ou entre com Google para trazer as fichas da nuvem'}.</p>`}
+    </section>`;
   }
 
   const isEdit = () => store.mode === 'edit';
@@ -580,7 +606,7 @@
     const m = ui.modal;
     if (!m) { modalRoot.innerHTML = ''; document.body.style.overflow = ''; return; }
     document.body.style.overflow = 'hidden';
-    const c = ch(), D = derived(c);
+    const c = ch(), D = c ? derived(c) : null;
     const prevScroll = modalRoot.querySelector('.sheet-modal, .drawer')?.scrollTop || 0;
     let html = '';
     if (m.type === 'menu') html = menuDrawer();
@@ -604,7 +630,7 @@
   function menuDrawer() {
     const items = store.order.map((id) => {
       const c = store.chars[id];
-      return `<button class="char-item ${id === store.current ? 'cur' : ''}" data-act="pick-char" data-id="${id}">
+      return `<button class="char-item ${id === store.current && !onHome() ? 'cur' : ''}" data-act="pick-char" data-id="${id}">
         <span class="av">${esc((c.nome || '?').trim()[0] || '?')}</span>
         <span><div class="nm">${esc(c.nome) || 'Sem nome'}</div><div class="cc">${esc(c.conceito) || '—'}</div></span></button>`;
     }).join('');
@@ -613,11 +639,21 @@
       ${modalHead('Fichas')}
       <div>${items}</div>
       <div class="menu-list">
-        <button class="menu-item" data-act="new-char">${I.add} Nova ficha em branco</button>
+        ${onHome() ? '' : `<button class="menu-item" data-act="home">${I.home} Todos os protagonistas</button>`}
+        <button class="menu-item" data-act="new-char">${I.add} Novo protagonista</button>
+        <button class="menu-item" data-act="import-char">${I.up} Importar ficha (.json)</button>
+        ${onHome() ? '' : `
+        <div class="menu-sep"></div>
         <button class="menu-item" data-act="dup-char">${I.copy} Duplicar esta ficha</button>
         <button class="menu-item" data-act="export-char">${I.down} Exportar ficha (.json)</button>
-        <button class="menu-item" data-act="import-char">${I.up} Importar ficha (.json)</button>
-        <button class="menu-item" data-act="del-char">${I.trash} Excluir esta ficha</button>
+        <button class="menu-item" data-act="export-pdf">${I.file} Exportar ficha (.pdf)</button>
+        <button class="menu-item" data-act="del-char">${I.trash} Excluir esta ficha</button>`}
+        <div class="menu-sep"></div>
+        ${ui.cloud
+          ? `<div class="menu-note">${I.cloud}<span>Salvando na nuvem como <b>${esc(ui.cloud.nome)}</b></span></div>
+             <button class="menu-item" data-act="sync">${I.up} Sincronizar agora</button>
+             <button class="menu-item" data-act="logout">${I.logout} Sair da conta</button>`
+          : `<button class="menu-item" data-act="login">${I.cloud} Entrar com Google (salvar na nuvem)</button>`}
         <div class="menu-sep"></div>
         ${wakeOk ? `<button class="menu-item" data-act="wake">${I.sun} ${ui.wake ? 'Tela sempre ligada: ativado' : 'Manter a tela ligada'}</button>` : ''}
         <button class="menu-item" data-act="about">${I.info} Como usar</button>
@@ -634,7 +670,7 @@
         <p style="margin:0"><b>Editar</b>: monte o protagonista — atributos, estilo, ocupações, trunfos, caminho, laços e técnicas. Os limiares e o Vigor são calculados automaticamente e o painel “Criação” mostra os pontos usados.</p>
         <p style="margin:0"><b>Jogar</b>: toque em um atributo, estilo ou ocupação para rolar. Toque na técnica para ver detalhes e em “Usar técnica” para gastar nagen e sincronização. A barra inferior mostra Sincronização, Nagen da rodada e Ações extras — toque nela para abrir a Mesa (nova rodada, nova cena, fim de sessão, poder das emoções).</p>
         <p style="margin:0"><b>Dados</b>: o app separa os dois maiores; toque em um dado para trocar a seleção. 6+ fora do total vira Sincronização, 1 fora do total vira Tensão. Nada muda na ficha até você tocar em “Aplicar”.</p>
-        <p style="margin:0">Tudo fica salvo neste aparelho. Use “Exportar” para guardar um backup ou passar a ficha para outro celular. Funciona offline depois do primeiro acesso.</p>
+        <p style="margin:0">Tudo fica salvo neste aparelho. Use “Exportar (.json)” para guardar um backup ou passar a ficha para outro celular, e “Exportar (.pdf)” para imprimir ou compartilhar. Se quiser, entre com sua conta Google pelo menu para salvar as fichas na nuvem e abri-las em outro aparelho. Funciona offline depois do primeiro acesso.</p>
         <button class="btn light" data-act="credits">${I.star} Ver créditos</button>
       </div></div></div>`;
   }
@@ -656,6 +692,7 @@
           <ul>
             <li><b>dice-box-threejs</b> (3d-dice / Frank Ali) — dados 3D, licença MIT, com <b>three.js</b> e <b>cannon-es</b> (MIT).</li>
             <li>Sons dos dados — acompanham o dice-box-threejs.</li>
+            <li><b>jsPDF</b> (James Hall, yWorks) — exportação da ficha em PDF, licença MIT.</li>
             <li>Fontes <b>Permanent Marker</b> (Font Diner, Apache 2.0) e <b>Chakra Petch</b> (Cadson Demak, OFL 1.1).</li>
           </ul>
         </div>
@@ -1136,17 +1173,38 @@
     const act = el.dataset.act;
     if (act === 'overlay' && ev.target !== el) return; // clique dentro do modal
     const c = ch();
-    const D = derived(c);
+    const D = c ? derived(c) : null;
     const id = el.dataset.id;
     const rerender = () => { save(); render(); };
 
     switch (act) {
       case 'overlay': case 'close': closeModal(); break;
-      case 'mode':
-        store.mode = el.dataset.v; save(); render();
+      case 'mode': {
+        const saindoDaEdicao = store.mode === 'edit' && el.dataset.v !== 'edit';
+        store.mode = el.dataset.v; save(true); render();
         window.scrollTo({ top: 0 });
+        if (saindoDaEdicao) salvarNaNuvem();
         break;
-      case 'open-menu': openModal({ type: 'menu' }); break;
+      }
+      case 'home': {
+        const editando = store.mode === 'edit';
+        save(true); store.view = 'home'; store.mode = 'play'; closeModal(); render(); window.scrollTo({ top: 0 });
+        if (editando) salvarNaNuvem();
+        break;
+      }
+      case 'open-menu':
+        openModal({ type: 'menu' });
+        // Já carrega o Firebase: o popup de login precisa abrir colado ao toque.
+        if (!ui.cloud && navigator.onLine) getNuvem().catch(() => {});
+        break;
+      case 'login': entrarNuvem(); break;
+      case 'sync': sincronizar(true); break;
+      case 'logout':
+        getNuvem().then((n) => n.sair()).then(() => {
+          try { localStorage.removeItem(NV_KEY); } catch (e) { /* ok */ }
+          toast('Você saiu. As fichas continuam salvas neste aparelho.');
+        }).catch(() => toast('Não foi possível sair agora.'));
+        break;
       case 'open-mesa': openModal({ type: 'mesa' }); break;
       case 'about': openModal({ type: 'about' }); break;
       case 'credits': openModal({ type: 'credits' }); break;
@@ -1354,32 +1412,37 @@
       case 'r-apply': applyRoll(); break;
 
       // fichas
-      case 'pick-char': store.current = id; save(); closeModal(); render(); window.scrollTo({ top: 0 }); break;
+      case 'pick-char':
+        if (store.mode === 'edit' && store.current !== id) salvarNaNuvem();
+        store.current = id; store.view = 'sheet'; save(); closeModal(); render(); window.scrollTo({ top: 0 }); break;
       case 'new-char': {
         const n = normalize(blankChar());
-        store.chars[n.id] = n; store.order.push(n.id); store.current = n.id; store.mode = 'edit';
+        store.chars[n.id] = n; store.order.push(n.id); store.current = n.id; store.mode = 'edit'; store.view = 'sheet';
         save(true); closeModal(); render(); window.scrollTo({ top: 0 });
         toast('Nova ficha criada. Comece pelo nome!');
         break;
       }
       case 'dup-char': {
         const n = normalize({ ...JSON.parse(JSON.stringify(c)), id: uid(), nome: `${c.nome || 'Ficha'} (cópia)` });
-        store.chars[n.id] = n; store.order.push(n.id); store.current = n.id;
+        store.chars[n.id] = n; store.order.push(n.id); store.current = n.id; store.view = 'sheet';
         save(true); closeModal(); render(); toast('Ficha duplicada.');
         break;
       }
       case 'export-char': exportChar(c); break;
+      case 'export-pdf': closeModal(); exportPdf(c); break;
       case 'import-char': $('#import-file')?.click(); break;
       case 'del-char':
         openModal({
           type: 'confirm', title: 'Excluir ficha', ok: 'Excluir',
           body: `<p style="margin:0">Excluir <b>${esc(c.nome) || 'esta ficha'}</b> deste aparelho? Exporte antes se quiser guardar uma cópia.</p>`,
           onOk: () => {
+            if (ui.cloud) getNuvem().then((n) => n.apagar(c.id)).catch(() => {});
+            delete sent[c.id];
             delete store.chars[c.id];
+            delete lastJ[c.id];
             store.order = store.order.filter((x) => x !== c.id);
-            if (!store.order.length) { const n = normalize(blankChar()); store.chars[n.id] = n; store.order.push(n.id); }
-            store.current = store.order[0];
-            save(true); toast('Ficha excluída.');
+            store.current = null; store.view = 'home'; store.mode = 'play';
+            save(true); render(); toast('Ficha excluída.');
           },
         });
         break;
@@ -1434,14 +1497,35 @@
   });
 
   // ---------- importar / exportar ----------
+  const fileBase = (c) => (c.nome || 'ficha').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ficha';
+  // No celular abre o menu de compartilhar; no computador baixa o arquivo.
+  function shareOrDownload(blob, name, title) {
+    const file = typeof File === 'function' ? new File([blob], name, { type: blob.type }) : null;
+    if (file && navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      navigator.share({ files: [file], title }).catch((e) => { if (!e || e.name !== 'AbortError') download(blob, name); });
+    } else download(blob, name);
+  }
   function exportChar(c) {
     const data = JSON.stringify({ app: 'karyu-densetsu-ficha', version: 1, ficha: c }, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const name = `${(c.nome || 'ficha').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ficha'}.json`;
-    const file = typeof File === 'function' ? new File([blob], name, { type: 'application/json' }) : null;
-    if (file && navigator.canShare && navigator.canShare({ files: [file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
-      navigator.share({ files: [file], title: c.nome || 'Ficha' }).catch(() => download(blob, name));
-    } else download(blob, name);
+    shareOrDownload(new Blob([data], { type: 'application/json' }), `${fileBase(c)}.json`, c.nome || 'Ficha');
+  }
+  let pdfLoading = null;
+  async function exportPdf(c) {
+    toast('Gerando o PDF...');
+    try {
+      if (!pdfLoading) {
+        pdfLoading = (async () => {
+          if (!window.jspdf) await loadScript('vendor/jspdf.umd.min.js');
+          if (!window.KD_PDF) await loadScript('js/pdf.js');
+        })().catch((e) => { pdfLoading = null; throw e; });
+      }
+      await pdfLoading;
+      ensureFeri(c);
+      const doc = window.KD_PDF.build(c, derived(c), KD, { tecCost });
+      shareOrDownload(doc.output('blob'), `${fileBase(c)}.pdf`, c.nome || 'Ficha');
+    } catch (e) {
+      toast('Não foi possível gerar o PDF. Verifique a conexão e tente de novo.');
+    }
   }
   function download(blob, name) {
     const a = document.createElement('a');
@@ -1458,11 +1542,100 @@
         const raw = data.ficha || data;
         if (!raw || typeof raw !== 'object' || !raw.atributos) throw new Error('formato');
         const n = normalize({ ...raw, id: uid() });
-        store.chars[n.id] = n; store.order.push(n.id); store.current = n.id;
+        store.chars[n.id] = n; store.order.push(n.id); store.current = n.id; store.view = 'sheet';
         save(true); closeModal(); render(); toast(`${n.nome || 'Ficha'} importada.`);
       } catch (e) { toast('Arquivo inválido — use um .json exportado por este app.'); }
     };
     reader.readAsText(file);
+  }
+
+  // ---------- nuvem (login com Google + Firestore) ----------
+  // Opcional: o localStorage continua sendo a cópia principal; a nuvem é backup e
+  // permite abrir as fichas em outro aparelho. Vale a cópia com o "upd" mais recente.
+  const NV_KEY = 'kd-nuvem';
+  const sent = {}; // id -> JSON da última versão enviada
+  let nuvem = null, pushTimer = null, syncing = false;
+  function getNuvem() {
+    if (!nuvem) {
+      nuvem = import('./nuvem.js').then(async (n) => {
+        await n.ready;
+        n.onUser((u) => {
+          const was = !!ui.cloud;
+          ui.cloud = u ? { nome: u.displayName || u.email || 'conta Google' } : null;
+          if (u) { try { localStorage.setItem(NV_KEY, '1'); } catch (e) { /* ok */ } }
+          if (u && !was) sincronizar();
+          if (ui.modal && ui.modal.type === 'menu') renderModal();
+        });
+        return n;
+      }).catch((e) => { nuvem = null; throw e; });
+    }
+    return nuvem;
+  }
+  async function entrarNuvem() {
+    try {
+      const n = await getNuvem();
+      await n.entrar();
+      toast('Conectado. Suas fichas serão salvas na nuvem.');
+    } catch (e) {
+      const code = e && e.code;
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
+      toast(code === 'auth/popup-blocked' ? 'O navegador bloqueou a janela de login. Toque de novo.'
+        : !navigator.onLine ? 'Sem internet. Tente de novo quando estiver conectado.'
+          : 'Não foi possível entrar agora.');
+    }
+  }
+  // Ao terminar uma edição (voltar para "Jogar", ir para o início ou trocar de ficha),
+  // envia na hora em vez de esperar o intervalo.
+  function salvarNaNuvem() {
+    if (!ui.cloud) return;
+    clearTimeout(pushTimer);
+    getNuvem().then(pushNuvem)
+      .then((n) => { if (n) toast('Ficha salva na nuvem.'); })
+      .catch(() => toast('Sem conexão: a ficha será enviada para a nuvem depois.'));
+  }
+  function schedulePush() {
+    if (!ui.cloud) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => { getNuvem().then(pushNuvem).catch(() => {}); }, 2000);
+  }
+  // Envia só as fichas editadas (com "upd") que mudaram desde o último envio.
+  async function pushNuvem(n) {
+    if (!n.user()) return 0;
+    let count = 0;
+    for (const id of store.order) {
+      const c = store.chars[id];
+      if (!c || !c.upd) continue;
+      const j = JSON.stringify(c);
+      if (sent[id] === j) continue;
+      await n.enviar(c);
+      sent[id] = j; count++;
+    }
+    return count;
+  }
+  async function sincronizar(manual) {
+    if (syncing) return;
+    syncing = true;
+    try {
+      const n = await getNuvem();
+      if (!n.user()) return;
+      const remotas = await n.baixarTodas();
+      let novas = 0;
+      remotas.forEach((r) => {
+        const l = store.chars[r.id];
+        if (!l || (r.upd || 0) > (l.upd || 0)) {
+          store.chars[r.id] = normalize(r);
+          lastJ[r.id] = bodyJ(store.chars[r.id]);
+          if (!l) { store.order.push(r.id); novas++; }
+          sent[r.id] = JSON.stringify(store.chars[r.id]);
+        }
+      });
+      try { localStorage.setItem(LS_KEY, JSON.stringify(store)); } catch (e) { /* ok */ }
+      await pushNuvem(n);
+      render();
+      if (manual || novas) toast(novas ? `${novas} ficha${novas > 1 ? 's' : ''} da nuvem adicionada${novas > 1 ? 's' : ''}.` : 'Fichas sincronizadas.');
+    } catch (e) {
+      if (manual) toast('Não foi possível sincronizar agora.');
+    } finally { syncing = false; }
   }
 
   // ---------- tela ligada ----------
@@ -1485,9 +1658,12 @@
 
   // ---------- início ----------
   store = load();
+  store.order.forEach((id) => { lastJ[id] = bodyJ(store.chars[id]); });
   render();
   // Prepara os dados 3D logo após abrir o app, para a primeira rolagem já sair na hora.
   setTimeout(() => { if (want3d()) getDiceBox().catch(() => {}); }, 800);
+  // Quem já entrou neste aparelho volta conectado (e sincroniza) ao abrir o app.
+  try { if (localStorage.getItem(NV_KEY) && navigator.onLine) getNuvem().catch(() => {}); } catch (e) { /* ok */ }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
