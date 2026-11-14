@@ -47,6 +47,7 @@
     cloud: svg('<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1-.5 9.5z"/>'),
     logout: svg('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/>'),
     home: svg('<path d="M4 11l8-7 8 7M6 9.5V20h12V9.5"/>'),
+    cloudOff: svg('<path d="M7 18a4.5 4.5 0 0 1-.6-8.96 6 6 0 0 1 1.3-2.6M10.5 5.2A6 6 0 0 1 18 8.5a4.5 4.5 0 0 1 2.3 8.3M3 3l18 18"/>'),
     table: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   };
 
@@ -147,7 +148,7 @@
   }
 
   // estado efêmero da interface
-  const ui = { cloud: null, open: {}, more: {}, modal: null, roll: null, pendingD10: 0, wake: null, catQuery: '', catTipo: null, catElem: null };
+  const ui = { cloud: null, cloudState: 'off', open: {}, more: {}, modal: null, roll: null, pendingD10: 0, wake: null, catQuery: '', catTipo: null, catElem: null };
 
   // ---------- regras derivadas ----------
   function fx(c) {
@@ -232,7 +233,7 @@
   const onHome = () => store.view === 'home' || !ch();
   function render() {
     if (onHome()) {
-      document.body.classList.remove('mode-edit');
+      document.body.classList.remove('mode-edit', 'has-seg');
       app.innerHTML = appbar() + `<main class="page home-page">${home()}</main>`;
       renderModal();
       return;
@@ -242,6 +243,7 @@
     const D = derived(c);
     c.estado.vigor = clamp(c.estado.vigor, 0, D.vigorMax);
     document.body.classList.toggle('mode-edit', store.mode === 'edit');
+    document.body.classList.add('has-seg');
     const focus = captureFocus();
     app.innerHTML = appbar() + `<main class="page">${sheet(c, D)}</main>` + dock(c, D);
     renderModal();
@@ -267,16 +269,40 @@
     if (onHome()) {
       return `<header class="appbar">
       <button class="icon-btn" data-act="open-menu" aria-label="Menu">${I.menu}</button>${brand}
+      ${cloudChip()}
     </header>`;
     }
     return `<header class="appbar">
       <button class="icon-btn" data-act="open-menu" aria-label="Fichas e opções">${I.menu}</button>
       ${brand}
+      ${cloudChip()}
       <div class="seg" role="group" aria-label="Modo">
         <button data-act="mode" data-v="play" aria-pressed="${!edit}">Jogar</button>
         <button data-act="mode" data-v="edit" aria-pressed="${edit}">Editar</button>
       </div>
     </header>`;
+  }
+
+  // Indicador da nuvem sempre visível na barra do topo.
+  const CLOUD = {
+    off: ['Entrar', 'Não conectado à nuvem. Toque para entrar com Google.'],
+    checking: ['Conectando…', 'Verificando sua conta na nuvem…'],
+    ok: ['Salvo', 'Conectado: as fichas estão salvas na nuvem.'],
+    saving: ['Salvando…', 'Enviando as alterações para a nuvem…'],
+    pending: ['Pendente', 'Há alterações que ainda não foram para a nuvem (sem conexão). Toque para tentar de novo.'],
+    lost: ['Desconectado', 'Você não está mais conectado à nuvem: as alterações ficam só neste aparelho. Toque para entrar de novo.'],
+  };
+  function cloudChip() {
+    const st = ui.cloudState;
+    const [lbl, tip] = CLOUD[st] || CLOUD.off;
+    const who = ui.cloud && (st === 'ok' || st === 'saving') ? ` (${ui.cloud.nome})` : '';
+    return `<button class="cloud-chip st-${st}" id="cloud-chip" data-act="cloud" title="${esc(tip + who)}" aria-label="${esc(tip + who)}">
+      ${st === 'off' || st === 'lost' ? I.cloudOff : I.cloud}<span class="dot" aria-hidden="true"></span><span class="lbl">${lbl}</span></button>`;
+  }
+  function setCloud(st) {
+    ui.cloudState = st;
+    const el = document.getElementById('cloud-chip');
+    if (el) el.outerHTML = cloudChip();
   }
 
   // Início: bloco "+ Protagonista" e um bloco para cada ficha criada.
@@ -1198,10 +1224,15 @@
         if (!ui.cloud && navigator.onLine) getNuvem().catch(() => {});
         break;
       case 'login': entrarNuvem(); break;
+      case 'cloud':
+        if (ui.cloud) { if (ui.cloudState === 'pending') salvarNaNuvem(); else openModal({ type: 'menu' }); }
+        else if (ui.cloudState !== 'checking') entrarNuvem();
+        break;
       case 'sync': sincronizar(true); break;
       case 'logout':
         getNuvem().then((n) => n.sair()).then(() => {
           try { localStorage.removeItem(NV_KEY); } catch (e) { /* ok */ }
+          setCloud('off');
           toast('Você saiu. As fichas continuam salvas neste aparelho.');
         }).catch(() => toast('Não foi possível sair agora.'));
         break;
@@ -1562,12 +1593,26 @@
         n.onUser((u) => {
           const was = !!ui.cloud;
           ui.cloud = u ? { nome: u.displayName || u.email || 'conta Google' } : null;
-          if (u) { try { localStorage.setItem(NV_KEY, '1'); } catch (e) { /* ok */ } }
-          if (u && !was) sincronizar();
+          let marcado = false;
+          try { marcado = !!localStorage.getItem(NV_KEY); } catch (e) { /* ok */ }
+          if (u) {
+            try { localStorage.setItem(NV_KEY, '1'); } catch (e) { /* ok */ }
+            if (!was) { setCloud('saving'); sincronizar(); }
+          } else if (marcado) {
+            // Já tinha entrado neste aparelho, mas a sessão não voltou: avisa bem visível.
+            setCloud('lost');
+            toast('Você não está conectado à nuvem: as alterações ficam só neste aparelho. Toque em “Desconectado” no topo para entrar.');
+          } else setCloud('off');
           if (ui.modal && ui.modal.type === 'menu') renderModal();
         });
         return n;
-      }).catch((e) => { nuvem = null; throw e; });
+      }).catch((e) => {
+        nuvem = null;
+        let marcado = false;
+        try { marcado = !!localStorage.getItem(NV_KEY); } catch (er) { /* ok */ }
+        if (marcado) setCloud('pending');
+        throw e;
+      });
     }
     return nuvem;
   }
@@ -1576,6 +1621,7 @@
       const n = await getNuvem();
       await n.entrar();
       toast('Conectado. Suas fichas serão salvas na nuvem.');
+      return;
     } catch (e) {
       const code = e && e.code;
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
@@ -1589,14 +1635,19 @@
   function salvarNaNuvem() {
     if (!ui.cloud) return;
     clearTimeout(pushTimer);
+    setCloud('saving');
     getNuvem().then(pushNuvem)
-      .then((n) => { if (n) toast('Ficha salva na nuvem.'); })
-      .catch(() => toast('Sem conexão: a ficha será enviada para a nuvem depois.'));
+      .then((n) => { setCloud('ok'); if (n) toast('Ficha salva na nuvem.'); })
+      .catch(() => { setCloud('pending'); toast('Sem conexão: a ficha será enviada para a nuvem depois.'); });
   }
   function schedulePush() {
     if (!ui.cloud) return;
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(() => { getNuvem().then(pushNuvem).catch(() => {}); }, 2000);
+    if (ui.cloudState === 'ok') setCloud('pending');
+    pushTimer = setTimeout(() => {
+      setCloud('saving');
+      getNuvem().then(pushNuvem).then(() => setCloud('ok')).catch(() => setCloud('pending'));
+    }, 2000);
   }
   // Envia só as fichas editadas (com "upd") que mudaram desde o último envio.
   async function pushNuvem(n) {
@@ -1631,9 +1682,11 @@
       });
       try { localStorage.setItem(LS_KEY, JSON.stringify(store)); } catch (e) { /* ok */ }
       await pushNuvem(n);
+      ui.cloudState = 'ok';
       render();
       if (manual || novas) toast(novas ? `${novas} ficha${novas > 1 ? 's' : ''} da nuvem adicionada${novas > 1 ? 's' : ''}.` : 'Fichas sincronizadas.');
     } catch (e) {
+      if (ui.cloud) setCloud('pending');
       if (manual) toast('Não foi possível sincronizar agora.');
     } finally { syncing = false; }
   }
@@ -1663,7 +1716,17 @@
   // Prepara os dados 3D logo após abrir o app, para a primeira rolagem já sair na hora.
   setTimeout(() => { if (want3d()) getDiceBox().catch(() => {}); }, 800);
   // Quem já entrou neste aparelho volta conectado (e sincroniza) ao abrir o app.
-  try { if (localStorage.getItem(NV_KEY) && navigator.onLine) getNuvem().catch(() => {}); } catch (e) { /* ok */ }
+  try {
+    if (localStorage.getItem(NV_KEY)) {
+      ui.cloudState = navigator.onLine ? 'checking' : 'pending';
+      if (navigator.onLine) getNuvem().catch(() => {});
+    }
+  } catch (e) { /* ok */ }
+  window.addEventListener('online', () => {
+    if (ui.cloud) sincronizar();
+    else if (ui.cloudState === 'pending') { setCloud('checking'); getNuvem().catch(() => {}); }
+  });
+  window.addEventListener('offline', () => { if (ui.cloud) setCloud('pending'); });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }

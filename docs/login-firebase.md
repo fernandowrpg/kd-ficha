@@ -1,221 +1,184 @@
 # Login com Firebase no GitHub Pages
 
-Como adicionar login (Google) e sincronizar fichas na nuvem neste app, que é estático e roda no GitHub Pages, sem expor nada que comprometa a segurança.
+Como o app faz login com Google e guarda as fichas na nuvem sendo um site estático no GitHub Pages, o que já está configurado no projeto Firebase `kd-ficha` e o que falta fazer.
 
-> Pesquisa feita em novembro de 2026. SDK web atual: **Firebase JS SDK 13.3.0** (`npm view firebase version`).
+> Atualizado em novembro de 2026. SDK web em uso: **Firebase JS SDK 13.3.0**, carregado do CDN `gstatic.com`.
 
-## Resposta curta: dá, e é seguro
+## Situação atual
 
-Dá sim. O ponto que costuma assustar é a `firebaseConfig` (com a `apiKey`) ficar pública no repositório. **Isso é esperado e não é uma falha.** Segundo a documentação do Firebase, a chave de API do Firebase só *identifica* o projeto. Quem decide o que cada usuário pode fazer são:
+| Item | Situação |
+|---|---|
+| Projeto Firebase `kd-ficha` (plano Spark, gratuito; Analytics e Gemini desligados) | ✅ Criado |
+| App web "KD Ficha Web" registrado (sem Firebase Hosting) | ✅ |
+| Login com Google (nome público "Karyu Densetsu Ficha") | ✅ Ativo |
+| Domínios autorizados do Authentication | ✅ `fernandowrpg.github.io` + padrões |
+| Firestore (Standard, `southamerica-east1`, modo produção) | ✅ Criado |
+| Regras de segurança do Firestore | ✅ Publicadas |
+| Chave de API restrita por site | ✅ |
+| App Check com reCAPTCHA Enterprise | ✅ Registrado e no código |
+| **Bloqueio do App Check em Firestore e Authentication** | ⏳ **Falta:** ligar depois de conferir as métricas |
+| Teste das regras no Rules Playground | ⏳ Não feito (o app funcionando no site cobre o caso normal) |
+
+Testado no site publicado: login, sincronização e envio da ficha ao terminar a edição funcionam com a chave restrita e o App Check ativo.
+
+## Por que é seguro deixar a config no código
+
+A `firebaseConfig` (com a `apiKey`) está em [`js/nuvem.js`](../js/nuvem.js), visível para qualquer um. **Isso é esperado.** A chave de API do Firebase só *identifica* o projeto; quem decide o acesso são as camadas abaixo:
 
 | Camada | O que protege |
 |---|---|
-| **Domínios autorizados** (Authentication) | Só `seu-usuario.github.io` e `localhost` podem abrir o fluxo de login. |
-| **Regras de segurança** do Firestore | Cada usuário só lê e grava as próprias fichas. **É a proteção principal.** |
-| **App Check** (reCAPTCHA Enterprise) | Bloqueia chamadas que não venham do seu site (scripts, bots, cópias do app). |
-| **Restrição da chave de API** (Google Cloud) | A chave só funciona a partir dos seus domínios e só para as APIs do Firebase. |
-| **Cotas** do Identity Toolkit | Limita o estrago se alguém abusar do cadastro ou do login. |
+| **Regras do Firestore** | Cada usuário só lê e grava `users/{seu uid}/fichas`. Tudo o mais é negado. **É a proteção principal.** |
+| **Domínios autorizados** | Só o GitHub Pages (e os domínios do próprio Firebase) podem abrir o login. |
+| **Restrição da chave de API** | A chave só aceita chamadas vindas do GitHub Pages e da página de login do Firebase. |
+| **App Check** | Prova, com reCAPTCHA, que a chamada vem do site de verdade e não de um script ou de uma cópia do app. |
 
-O que **nunca** pode ir para o repositório: chave de conta de serviço (`serviceAccount.json`), Admin SDK, chave da API do Gemini ou de qualquer outro serviço pago. O app deve continuar funcionando **sem login**. A nuvem é só um extra para backup e para usar a ficha em mais de um aparelho.
+O que **nunca** pode ir para o repositório: chave de conta de serviço (`serviceAccount.json`), Admin SDK e chaves de outros serviços pagos.
 
-## A pegadinha do GitHub Pages: use popup, não redirect
+## Por que o login é por popup
 
-O `signInWithRedirect()` depende de o `authDomain` estar no mesmo domínio do app. Desde 2024, o Chrome (M115+), o Firefox (109+) e o Safari (16.1+) bloqueiam o armazenamento de terceiros que ele usaria. As soluções que o Firebase lista são:
+O `signInWithRedirect()` precisa que o `authDomain` esteja no mesmo domínio do app. Desde 2024 Chrome, Firefox e Safari bloqueiam o armazenamento de terceiros de que ele dependeria. Como o app está em `github.io` e o `authDomain` é `kd-ficha.firebaseapp.com`, o app usa **`signInWithPopup()`**. No celular o popup abre como uma aba nova e volta sozinho.
 
-1. `authDomain` no domínio próprio via Firebase Hosting: **não serve**, o app está no GitHub Pages.
-2. **`signInWithPopup()`**: **é esta.** Funciona em qualquer hospedagem.
-3. Proxy reverso em `/__/auth/`: **não serve**, o GitHub Pages não permite.
-4. Hospedar os arquivos do handler de login no próprio site: possível, mas exige ressincronizar os arquivos (houve correções importantes no 3º trimestre de 2026) e não funciona com Apple. **Não vale a pena aqui.**
-5. Login pelo SDK do próprio provedor + `signInWithCredential()`: complexo demais.
-
-Então use **`signInWithPopup`** com o `authDomain` padrão (`<projeto>.firebaseapp.com`). Em celular o popup abre como uma nova aba e volta sozinho. Funciona bem no Android/Chrome e no Safari do iOS, desde que a chamada parta de um toque do usuário (não de um `setTimeout` nem de um `await` longo antes).
-
-> Se um dia o app migrar para o Firebase Hosting (ou para um domínio próprio servido por ele), dá para trocar para redirect com a opção 1.
+O popup precisa abrir colado ao toque do usuário. Por isso o app já baixa o Firebase quando o menu é aberto, antes de a pessoa tocar em "Entrar com Google".
 
 ---
 
-## Passo a passo
+## Como o app usa o Firebase
 
-### 1. Console do Firebase
+### Arquivos
 
-1. Em <https://console.firebase.google.com>, crie o projeto (o Analytics pode ficar desligado).
-2. **Adicionar app → Web**. Copie o objeto `firebaseConfig`. **Não** marque "Firebase Hosting".
-3. **Authentication → Método de login → Google → Ativar.** Escolha o e-mail de suporte.
-4. **Authentication → Configurações → Domínios autorizados**: adicione `fernandowrpg.github.io`, mantenha `localhost` e **remova** qualquer outro domínio que não use.
-5. **Firestore Database → Criar banco** em **modo de produção** (tudo bloqueado), região `southamerica-east1` (São Paulo).
-6. Publique as regras do passo 3.
+- [`js/nuvem.js`](../js/nuvem.js) é o módulo ES que carrega o SDK do CDN, inicializa o App Check, o Auth e o Firestore, e exporta `entrar`, `sair`, `enviar`, `baixarTodas` e `apagar`.
+- [`js/app.js`](../js/app.js) carrega o `nuvem.js` com `import()` **só quando precisa**: no clique em "Entrar com Google", ao abrir o menu, ou na abertura do app se a pessoa já tinha entrado naquele aparelho (marca `kd-nuvem` no `localStorage`). Quem nunca entra não baixa nada do Firebase.
+- [`sw.js`](../sw.js) guarda o `js/nuvem.js` no cache offline. Os scripts do Firebase (gstatic) e as chamadas aos servidores do Google não passam pelo cache: o login precisa de internet de qualquer jeito.
 
-### 2. Estrutura dos dados
+### Dados
 
 ```
 users/{uid}/fichas/{fichaId}
-  ficha:      { ...objeto da ficha, igual ao exportado em .json }
+  ficha:      { ...a ficha inteira, igual ao .json exportado, com "upd" }
   updatedAt:  timestamp do servidor
   v:          1
 ```
 
-Uma ficha por documento. O limite é 1 MiB por documento, e uma ficha tem poucos KB.
+### Sincronização
 
-### 3. Regras de segurança do Firestore
+- **O aparelho é a cópia principal.** O `localStorage` continua valendo; a nuvem é backup e serve para usar a mesma ficha em outro aparelho.
+- **Cada ficha tem um campo `upd`** com a data da última alteração. Ele só muda quando o conteúdo muda de verdade: abrir uma ficha ou trocar de modo não conta.
+- **Ao entrar**, o app baixa as fichas da nuvem. Para cada ficha vale a versão com o `upd` mais recente, e as que só existem na nuvem são adicionadas ao aparelho. Em seguida envia as fichas locais que estão mais novas.
+- **Durante o uso**, cada alteração é enviada 2 s depois.
+- **Ao terminar uma edição** (voltar para "Jogar", ir para o início ou trocar de ficha), o envio é imediato e aparece o aviso "Ficha salva na nuvem".
+- **Ao excluir uma ficha**, ela também é apagada da nuvem.
+- **Fichas nunca editadas** (sem `upd`) não são enviadas.
+- **Indicador na barra do topo** (sempre visível, no início e na ficha):
 
-Esta é a parte que realmente protege os dados. Cole em **Firestore → Regras**:
+  | Indicador | Significado |
+  |---|---|
+  | "Entrar" (cinza) | Nunca entrou neste aparelho |
+  | "Conectando…" | Verificando a conta ao abrir o app |
+  | "Salvo" (bolinha verde) | Conectado; tudo enviado |
+  | "Salvando…" | Enviando alterações |
+  | "Pendente" (laranja) | Sem conexão; envia quando a internet voltar (toque para tentar já) |
+  | **"Desconectado" (vermelho)** | Já tinha entrado aqui, mas a sessão não voltou; as alterações ficam só no aparelho até entrar de novo (toque para entrar) |
+
+  Quando a sessão não volta, aparece também um aviso. Ao entrar de novo, as alterações feitas enquanto estava desconectado são enviadas, porque são mais novas que as da nuvem.
+- **Limitação conhecida:** se outro aparelho ainda tiver a ficha excluída, ele a envia de volta na próxima sincronização. Resolver isso exige guardar um registro das fichas excluídas.
+
+### Regras do Firestore (publicadas)
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Cada usuário só enxerga a própria pasta.
     match /users/{uid}/fichas/{fichaId} {
       allow read, delete: if isOwner(uid);
       allow create, update: if isOwner(uid) && validFicha();
     }
-
-    // Todo o resto é negado.
     match /{document=**} {
       allow read, write: if false;
     }
-
     function isOwner(uid) {
       return request.auth != null && request.auth.uid == uid;
     }
-
     function validFicha() {
       let d = request.resource.data;
-      return d.keys().hasOnly(['ficha', 'updatedAt', 'v'])
-        && d.ficha is map
+      return d.keys().hasOnly(['ficha', 'updatedAt', 'v']) && d.ficha is map
         && d.ficha.nome is string && d.ficha.nome.size() <= 200
-        && d.updatedAt == request.time      // obriga serverTimestamp()
-        && d.v == 1;
+        && d.updatedAt == request.time && d.v == 1;
     }
   }
 }
 ```
 
-Teste antes de publicar, no **Rules Playground** do console:
+`d.updatedAt == request.time` obriga o uso de `serverTimestamp()`, então o cliente não consegue inventar a data.
 
-- Leitura de `users/OUTRO_UID/fichas/x` logado como você: **negada**.
-- Gravação sem estar logado: **negada**.
+---
 
-### 4. Código: módulo carregado só quando a pessoa quiser entrar
+## Configuração feita no console (para refazer ou conferir)
 
-O app é um script clássico (IIFE). O Firebase usa módulos ES, então o melhor é um arquivo separado `js/nuvem.js` carregado com `import()` no clique em "Entrar". Quem nunca usar login não baixa nada do Firebase, e o app continua 100% offline.
+### Firebase: Authentication
 
-`js/nuvem.js`:
+- **Método de login → Google:** ativado, com nome público "Karyu Densetsu Ficha" e o e-mail da conta como suporte.
+- **Configurações → Domínios autorizados:**
+  - `localhost` e `kd-ficha.web.app`: padrões, não usados pelo app;
+  - `kd-ficha.firebaseapp.com`: padrão, **necessário** para o popup;
+  - `fernandowrpg.github.io`: adicionado.
 
-```js
-// Login e sincronização opcionais. Carregado sob demanda pelo app.js.
-const V = '13.3.0';
-const base = `https://www.gstatic.com/firebasejs/${V}`;
-const [{ initializeApp }, auth, fs, ac] = await Promise.all([
-  import(`${base}/firebase-app.js`),
-  import(`${base}/firebase-auth.js`),
-  import(`${base}/firebase-firestore.js`),
-  import(`${base}/firebase-app-check.js`),
-]);
+### Firebase: Firestore
 
-// Público por natureza: identifica o projeto, não dá acesso a nada sozinho.
-const app = initializeApp({
-  apiKey: '...',
-  authDomain: 'SEU-PROJETO.firebaseapp.com',
-  projectId: 'SEU-PROJETO',
-  appId: '...',
-});
+- Edição Standard, local `southamerica-east1` (São Paulo; **não pode ser mudado depois**), começou em modo produção.
+- Regras: as da seção acima. No console, o editor de regras fecha chaves sozinho ao digitar; confira o fim do texto antes de publicar.
 
-// App Check antes de qualquer outro serviço (passo 5).
-if (location.hostname === 'localhost') self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-ac.initializeAppCheck(app, {
-  provider: new ac.ReCaptchaEnterpriseProvider('CHAVE_RECAPTCHA_ENTERPRISE'),
-  isTokenAutoRefreshEnabled: true,
-});
+### Google Cloud: chave de API
 
-const a = auth.getAuth(app);
-a.languageCode = 'pt';
-await auth.setPersistence(a, auth.browserLocalPersistence);
-const db = fs.initializeFirestore(app, {
-  localCache: fs.persistentLocalCache(), // funciona offline e sincroniza depois
-});
+Em [APIs e serviços → Credenciais](https://console.cloud.google.com/apis/credentials?project=kd-ficha), na "Browser key (auto created by Firebase)":
 
-const col = (uid) => fs.collection(db, 'users', uid, 'fichas');
+- **Restrições do aplicativo → Sites:**
+  - `https://fernandowrpg.github.io/*`
+  - `https://kd-ficha.firebaseapp.com/*`: **obrigatório**. A janela de login do Google roda nesse domínio e usa a mesma chave; sem ele o login quebra.
+- **Restrições de API:** a lista que o Firebase criou (25 APIs). Não foi mexida.
+- **Sem `localhost`**, por decisão do projeto. Por isso **login e sincronização não funcionam no teste local** (`http://localhost:8765`), só no site publicado. O resto do app funciona normalmente em localhost. Para testar a nuvem localmente, seria preciso adicionar temporariamente `http://localhost:8765/*` (o console não aceita curinga na porta).
 
-export const onUser = (cb) => auth.onAuthStateChanged(a, cb);
+### Google Cloud + Firebase: App Check
 
-// Precisa ser chamado direto do clique (senão o navegador bloqueia o popup).
-export function entrar() {
-  return auth.signInWithPopup(a, new auth.GoogleAuthProvider());
-}
-export const sair = () => auth.signOut(a);
+1. Ativei a **reCAPTCHA Enterprise API** (hoje chamada "Fraud Defense") no projeto. São 10 mil avaliações grátis por mês e não pediu conta de faturamento.
+2. Em [Segurança → Fraud Defense](https://console.cloud.google.com/security/recaptcha?project=kd-ficha), criei a chave **"KD Ficha App Check"**:
+   - tipo Web, domínio `fernandowrpg.github.io`;
+   - sem desafio de checkbox (baseada em pontuação), sem AMP, sem WAF.
+   - Chave de site (pública): `6LcKJCAuAAAAAAnIjV-5HzBFHFHlKxSpDzZXPWW6`.
+3. Em **Firebase → App Check → Apps**, registrei o "KD Ficha Web" com o provedor Fraud Defense, essa chave e TTL de 1 hora. O status aparece como **Registrado**.
+4. No código, `initializeAppCheck(..., ReCaptchaEnterpriseProvider(chave))` roda antes do Auth e do Firestore, com renovação automática do token.
+5. **Em localhost** o reCAPTCHA não vale. O código liga `FIREBASE_APPCHECK_DEBUG_TOKEN = true`, e o console do navegador mostra um token que pode ser cadastrado em **App Check → Apps → ⋮ → Gerenciar tokens de depuração**. (Com a chave de API sem localhost, isso só importa se o localhost for liberado para testes.)
 
-export async function enviar(ficha) {
-  const u = a.currentUser;
-  if (!u) throw new Error('sem login');
-  await fs.setDoc(fs.doc(col(u.uid), ficha.id), {
-    ficha, v: 1, updatedAt: fs.serverTimestamp(),
-  });
-}
+---
 
-export async function baixarTodas() {
-  const u = a.currentUser;
-  if (!u) return [];
-  const snap = await fs.getDocs(col(u.uid));
-  return snap.docs.map((d) => ({ ficha: d.data().ficha, updatedAt: d.data().updatedAt?.toMillis() || 0 }));
-}
+## O que falta
 
-export const apagar = (id) => fs.deleteDoc(fs.doc(col(a.currentUser.uid), id));
-```
+### 1. Ligar o bloqueio do App Check
 
-No `app.js` (dentro da IIFE):
+Hoje o App Check só **mede** as requisições, sem bloquear nenhuma. Depois de alguns dias de uso:
 
-```js
-let nuvem = null;
-const getNuvem = () => (nuvem ||= import('./nuvem.js'));
+1. Abra **Firebase → App Check → APIs**.
+2. Em **Cloud Firestore** e em **Authentication**, confira se quase todas as requisições aparecem como **verificadas**. Requisições "não verificadas" vindas de versões antigas do app em cache tendem a sumir.
+3. Clique em **Aplicar** em cada um.
 
-// No menu: <button class="menu-item" data-act="login">Entrar com Google</button>
-case 'login': {
-  // Dica: chame getNuvem() já ao abrir o menu, para o módulo estar pronto
-  // e o popup sair "colado" ao toque.
-  getNuvem().then((n) => n.entrar())
-    .then(() => toast('Conectado. Suas fichas serão salvas na nuvem.'))
-    .catch((e) => toast(e.code === 'auth/popup-blocked'
-      ? 'O navegador bloqueou a janela de login. Toque de novo.'
-      : 'Não foi possível entrar.'));
-  break;
-}
-```
+A partir daí, chamadas sem token válido são recusadas. Se algo quebrar, dá para desfazer no mesmo lugar.
 
-E no `save()`, depois do `localStorage`, envie a ficha atual com *debounce* (por exemplo, 3 s) se houver usuário logado. Na entrada, faça `baixarTodas()` e mescle: para cada `id`, fica a versão com `updatedAt` mais recente. Guarde um `updatedAt` local na ficha para comparar.
+### 2. Opcional
 
-### 5. App Check (recomendado)
-
-1. No Google Cloud console, em **Security → reCAPTCHA** (Fraud Defense), crie uma chave do tipo **Web**, **baseada em pontuação**, sem desafio de checkbox, com o domínio `fernandowrpg.github.io`. **Não** inclua `localhost` na chave de produção.
-2. No console do Firebase, em **App Check → Apps**, registre o app web com **reCAPTCHA Enterprise** e essa chave.
-3. Em localhost use o **token de depuração**: o `FIREBASE_APPCHECK_DEBUG_TOKEN = true` do código imprime um token no console do navegador. Cadastre esse token em **App Check → Apps → Gerenciar tokens de depuração**.
-4. Acompanhe as métricas por alguns dias e só então clique em **Aplicar** (enforce) para **Firestore** e **Authentication**.
-
-### 6. Restringir a chave de API
-
-No [Google Cloud console → APIs e serviços → Credenciais](https://console.cloud.google.com/apis/credentials), abra a "Browser key (auto created by Firebase)":
-
-- **Restrições de aplicativo → Referenciadores HTTP**: `https://fernandowrpg.github.io/*` e `http://localhost:*/*`.
-- **Restrições de API**: deixe só as que o Firebase marcou (Identity Toolkit, Token Service, Firestore, Firebase App Check, Firebase Installations). Não adicione outras.
-- Em **Cotas**, reduza as do `identitytoolkit.googleapis.com` para algo compatível com um grupo de RPG.
-
-### 7. Ajustes no app
-
-- **Service worker**: o `sw.js` atual só trata requisições do próprio domínio e do Google Fonts, então as chamadas para `googleapis.com`/`gstatic.com/firebasejs` passam direto. **Não** coloque os scripts do Firebase no `ASSETS` (o login precisa de rede de qualquer jeito). Lembre de colocar `js/nuvem.js` no `ASSETS` e subir o `CACHE`.
-- **Sem login, tudo igual**: `localStorage` continua sendo a fonte principal. A nuvem é cópia.
-- **Excluir conta**: ofereça "Apagar meus dados da nuvem" (apaga a coleção e chama `deleteUser`). É boa prática e exigência da LGPD.
-- **Não confie no cliente**: qualquer regra de negócio que importe (limite de fichas, campos válidos) tem de estar nas *Security Rules*, não no JS.
+- **Cotas do Identity Toolkit**: dá para reduzir as cotas de `identitytoolkit.googleapis.com` no Google Cloud para algo do tamanho de um grupo de RPG.
+- **Alertas de orçamento**: só fazem sentido se um dia o projeto passar para o plano Blaze.
+- **Apagar meus dados da nuvem**: oferecer no app uma opção que apague a coleção do usuário e a conta (`deleteUser`), como manda a LGPD.
+- **Registro de fichas excluídas**: para que a exclusão valha em todos os aparelhos.
 
 ## Checklist de segurança
 
-- [ ] Firestore criado em modo produção, com as regras acima publicadas e testadas no Playground
-- [ ] Domínios autorizados: apenas `fernandowrpg.github.io` e `localhost`
-- [ ] Login por `signInWithPopup` (não redirect)
-- [ ] Chave de API restrita por referenciador e por API
-- [ ] App Check registrado, monitorado e depois aplicado em Firestore e Auth
-- [ ] Nenhuma credencial de servidor ou chave de outro serviço no repositório
-- [ ] Alertas de orçamento no Google Cloud (plano Spark gratuito basta para esse uso)
+- [x] Firestore em modo produção, com as regras acima publicadas
+- [ ] Regras testadas no Rules Playground (ler outro uid: negado; gravar sem login: negado)
+- [x] Domínios autorizados: GitHub Pages e os domínios padrão do Firebase
+- [x] Login por `signInWithPopup` (não redirect)
+- [x] Chave de API restrita por site (`github.io` e `firebaseapp.com`) e por API
+- [x] App Check registrado e inicializado no código
+- [ ] Bloqueio do App Check ligado em Firestore e Authentication
+- [x] Nenhuma credencial de servidor ou chave de outro serviço no repositório
 
 ## Fontes
 

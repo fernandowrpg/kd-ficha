@@ -100,6 +100,29 @@ button:disabled { cursor: default; }
 }
 .icon-btn:hover { background: rgba(255,255,255,.08); }
 .icon-btn svg { width: 24px; height: 24px; }
+.cloud-chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; flex: none;
+  border: 1px solid var(--steel-700); border-radius: var(--radius); color: var(--steel-300);
+  font-size: 13px; font-weight: 700; position: relative;
+}
+.cloud-chip:hover { background: rgba(255,255,255,.08); }
+.cloud-chip svg { width: 20px; height: 20px; }
+.cloud-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--steel-500); flex: none; }
+.cloud-chip.st-ok { color: var(--steel-0); }
+.cloud-chip.st-ok .dot { background: #4CBF6B; }
+.cloud-chip.st-saving .dot, .cloud-chip.st-checking .dot { background: var(--fiery-300); animation: chip-pulse 1s ease-in-out infinite; }
+.cloud-chip.st-pending { color: var(--fiery-200); border-color: var(--fiery-500); }
+.cloud-chip.st-pending .dot { background: var(--fiery-400); }
+.cloud-chip.st-lost { color: var(--steel-0); background: var(--primary-bg-dark); border-color: var(--fiery-500); }
+.cloud-chip.st-lost .dot { background: var(--steel-0); }
+@keyframes chip-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .cloud-chip .dot { animation: none !important; } }
+/* No celular, dentro da ficha, só o ícone e a bolinha (exceto quando desconectado). */
+@media (max-width: 479px) {
+  body.has-seg .cloud-chip:not(.st-lost) .lbl { display: none; }
+  body.has-seg .cloud-chip:not(.st-lost) { padding: 0 8px; }
+  body.has-seg .cloud-chip.st-lost .lbl { font-size: 12px; }
+}
 .seg {
   display: inline-flex; border: 1px solid var(--steel-700); border-radius: var(--radius); overflow: hidden;
 }
