@@ -18,7 +18,7 @@ Como o app faz login com Google e guarda as fichas na nuvem sendo um site estát
 | App Check com reCAPTCHA Enterprise | ✅ Registrado e no código |
 | **Bloqueio do App Check em Firestore e Authentication** | ⏳ **Falta:** ligar depois de conferir as métricas |
 | Teste das regras no Rules Playground | ⏳ Não feito (o app funcionando no site cobre o caso normal) |
-| **Regras das mesas (modo narrador)** | ⏳ **Falta:** publicar a versão nova da seção “Regras do Firestore” |
+| Regras das mesas (modo narrador) | ✅ Publicadas em 14/11/2026 |
 
 Testado no site publicado: login, sincronização e envio da ficha ao terminar a edição funcionam com a chave restrita e o App Check ativo.
 
@@ -107,9 +107,9 @@ salas/{salaId}/painel/{uid}    resumo público do protagonista aceito (nome, vig
 - **API (JSON)**: `GET https://firestore.googleapis.com/v1/projects/kd-ficha/databases/(default)/documents/salas/{salaId}/painel` devolve os resumos no formato REST do Firestore. Quando o bloqueio do App Check for ligado, chamadas REST sem token do App Check passam a ser recusadas; o overlay continua funcionando porque usa o SDK com App Check.
 - Um jogador removido pode pedir para entrar de novo enquanto a mesa estiver aberta; para impedir, o narrador desmarca “Aceitando novos jogadores”.
 
-### Regras do Firestore
+### Regras do Firestore (publicadas)
 
-> ⏳ **Falta publicar** a versão com as mesas (Firebase → Firestore → Regras). Sem ela, criar mesa, entrar e o overlay dão “permissão negada”; o resto do app continua funcionando com as regras antigas.
+Versão com as mesas publicada em 14/11/2026. No console, o editor fecha chaves sozinho ao digitar; ao colar, confira o fim do texto antes de publicar.
 
 ```
 rules_version = '2';
